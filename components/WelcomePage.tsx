@@ -2,40 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-
-interface SessionUI {
-  id: string;
-  name: string;
-  workingDirectory: string;
-  createdAt: string;
-  messageCount: number;
-}
-
-interface GroupedSessions {
-  [directory: string]: SessionUI[];
-}
+import SessionHistory from './SessionHistory';
 
 export default function WelcomePage() {
   const [selectedDirectory, setSelectedDirectory] = useState('');
   const [availableDirectories, setAvailableDirectories] = useState<string[]>([]);
-  const [groupedSessions, setGroupedSessions] = useState<GroupedSessions>({});
   const [showDirectoryInput, setShowDirectoryInput] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    loadSessions();
     loadAvailableDirectories();
   }, []);
-
-  const loadSessions = async () => {
-    try {
-      const response = await fetch('/api/sessions');
-      const data = await response.json();
-      setGroupedSessions(data.groupedSessions || {});
-    } catch (error) {
-      console.error('セッション読み込みエラー:', error);
-    }
-  };
 
   const loadAvailableDirectories = async () => {
     try {
@@ -73,46 +50,11 @@ export default function WelcomePage() {
     }
   };
 
-  const selectSession = (sessionId: string) => {
-    router.push(`/chat/${sessionId}`);
-  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex">
       {/* 左側：セッション履歴 */}
-      <div className="w-80 bg-gray-800 border-r border-gray-700 flex flex-col">
-        <div className="p-4 border-b border-gray-700">
-          <h2 className="text-lg font-semibold">セッション履歴</h2>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-4">
-          {Object.keys(groupedSessions).length === 0 ? (
-            <p className="text-gray-400 text-center">まだセッションがありません</p>
-          ) : (
-            Object.entries(groupedSessions).map(([directory, sessions]) => (
-              <div key={directory} className="mb-6">
-                <h3 className="text-sm font-medium text-gray-300 mb-2 truncate" title={directory}>
-                  📁 {directory}
-                </h3>
-                <div className="space-y-2">
-                  {sessions.map((session) => (
-                    <button
-                      key={session.id}
-                      onClick={() => selectSession(session.id)}
-                      className="w-full text-left p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-                    >
-                      <div className="font-medium text-sm truncate">{session.name}</div>
-                      <div className="text-xs text-gray-400 mt-1">
-                        {new Date(session.createdAt).toLocaleDateString('ja-JP')} • {session.messageCount}件
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+      <SessionHistory showNewChatButton={false} />
 
       {/* 右側：メインコンテンツ */}
       <div className="flex-1 flex items-center justify-center">

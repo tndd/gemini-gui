@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
+import SessionHistory from './SessionHistory';
 
 interface Message {
   id: string;
@@ -31,7 +32,6 @@ interface ChatInterfaceProps {
 export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [sessionsByDirectory, setSessionsByDirectory] = useState<{ [directory: string]: SessionUI[] }>({});
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -43,8 +43,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   );
   const [currentWorkingDirectory, setCurrentWorkingDirectory] = useState<string>('');
   const [currentSessionName, setCurrentSessionName] = useState<string>('');
-  const [editingSessionId, setEditingSessionId] = useState<string>('');
-  const [editingSessionName, setEditingSessionName] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -71,18 +69,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
     }
   }, [initialSessionId]);
 
-  const loadSessions = async () => {
-    try {
-      const response = await fetch('/api/sessions');
-      const data = await response.json();
-      
-      if (data.sessionsByDirectory) {
-        setSessionsByDirectory(data.sessionsByDirectory);
-      }
-    } catch (error) {
-      console.error('セッション読み込みエラー:', error);
-    }
-  };
 
   const loadDirectories = async (basePath?: string) => {
     try {
@@ -205,37 +191,8 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
     loadDirectories();
   };
 
-  const startEditingSession = (session: SessionUI) => {
-    setEditingSessionId(session.id);
-    setEditingSessionName(session.title);
-  };
 
-  const saveSessionName = async () => {
-    if (!editingSessionName.trim()) return;
 
-    try {
-      await fetch(`/api/sessions/${editingSessionId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editingSessionName })
-      });
-
-      if (editingSessionId === sessionId) {
-        setCurrentSessionName(editingSessionName);
-      }
-
-      setEditingSessionId('');
-      setEditingSessionName('');
-      loadSessions();
-    } catch (error) {
-      console.error('セッション名更新エラー:', error);
-    }
-  };
-
-  const cancelEditingSession = () => {
-    setEditingSessionId('');
-    setEditingSessionName('');
-  };
 
   const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -321,95 +278,14 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   return (
     <div className="flex h-screen bg-gray-800 text-white">
       {/* サイドバー */}
-      <div className={`${isSidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 bg-gray-900 border-r border-gray-700 flex flex-col overflow-hidden`}>
-        <div className="p-4 border-b border-gray-700 space-y-2">
-          <button
-            onClick={() => createNewSession()}
-            className="w-full bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            <span>+</span>
-            新しいチャット
-          </button>
-          <button
-            onClick={openDirectorySelector}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            <span>📁</span>
-            ディレクトリを選択
-          </button>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-2">
-          {Object.entries(sessionsByDirectory).map(([directory, sessions]) => (
-            <div key={directory} className="mb-4">
-              <div className="text-xs text-gray-400 px-2 py-1 font-medium truncate">
-                📁 {directory.split('/').pop() || directory}
-              </div>
-              <div className="text-xs text-gray-500 px-2 mb-2 truncate">
-                {directory}
-              </div>
-              {sessions.map((session) => (
-                <div
-                  key={session.id}
-                  className={`p-3 rounded-lg mb-2 ml-2 transition-colors group ${
-                    session.id === sessionId 
-                      ? 'bg-gray-700' 
-                      : 'hover:bg-gray-800'
-                  }`}
-                >
-                  {editingSessionId === session.id ? (
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        value={editingSessionName}
-                        onChange={(e) => setEditingSessionName(e.target.value)}
-                        className="w-full bg-gray-600 text-white px-2 py-1 rounded text-sm"
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') saveSessionName();
-                          if (e.key === 'Escape') cancelEditingSession();
-                        }}
-                        autoFocus
-                      />
-                      <div className="flex gap-1">
-                        <button
-                          onClick={saveSessionName}
-                          className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded"
-                        >
-                          保存
-                        </button>
-                        <button
-                          onClick={cancelEditingSession}
-                          className="text-xs bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded"
-                        >
-                          キャンセル
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div onClick={() => selectSession(session)} className="cursor-pointer">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium truncate flex-1">{session.title}</div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startEditingSession(session);
-                          }}
-                          className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white ml-2 text-xs"
-                        >
-                          ✏️
-                        </button>
-                      </div>
-                      <div className="text-xs text-gray-400 mt-1">
-                        {new Date(session.timestamp).toLocaleDateString('ja-JP')}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
+      {isSidebarOpen && (
+        <SessionHistory
+          onNewChatClick={() => createNewSession()}
+          showDirectorySelector={true}
+          onDirectorySelectorClick={openDirectorySelector}
+          className="w-80 bg-gray-900 border-r border-gray-700 flex flex-col transition-all duration-300"
+        />
+      )}
 
       {/* ディレクトリ選択モーダル */}
       {showDirectorySelector && (
