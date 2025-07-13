@@ -43,7 +43,11 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   );
   const [currentWorkingDirectory, setCurrentWorkingDirectory] = useState<string>('');
   const [currentSessionName, setCurrentSessionName] = useState<string>('');
+  const [latestSessionId, setLatestSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 現在のセッションが最新（アクティブ）かどうかを判定
+  const isActiveSession = sessionId === latestSessionId;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -58,7 +62,19 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
     if (initialSessionId) {
       loadSessionHistory(initialSessionId);
     }
+    // 最新セッションIDを取得
+    loadLatestSessionId();
   }, []);
+
+  const loadLatestSessionId = async () => {
+    try {
+      const response = await fetch('/api/sessions');
+      const data = await response.json();
+      setLatestSessionId(data.latestSessionId);
+    } catch (error) {
+      console.error('最新セッションID取得エラー:', error);
+    }
+  };
 
   useEffect(() => {
     // initialSessionIdが変更された場合、セッションを切り替える
@@ -142,10 +158,14 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
               workingDirectory: finalWorkingDir
             })
           });
-          loadSessions();
+          // 最新セッションIDを更新
+          setLatestSessionId(sessionId);
         } catch (error) {
           console.error('セッション更新エラー:', error);
         }
+      } else {
+        // セッション再利用の場合も最新セッションとして設定
+        setLatestSessionId(sessionId);
       }
       return;
     }
@@ -171,7 +191,9 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
       setCurrentWorkingDirectory(finalWorkingDir);
       setCurrentSessionName(finalSessionName);
       setShowDirectorySelector(false);
-      loadSessions();
+      
+      // 最新セッションIDを更新
+      setLatestSessionId(newSessionId);
       
       // 新しいセッションページに遷移
       router.push(`/chat/${newSessionId}`);
@@ -251,7 +273,8 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
         }
       }
       
-      loadSessions(); // セッション一覧を更新
+      // 最新セッションIDを更新（このセッションが最新になる）
+      setLatestSessionId(sessionId);
 
     } catch (error) {
       const errorMessage: Message = {
@@ -457,22 +480,39 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
         {/* 入力エリア */}
         <div className="bg-gray-900 border-t border-gray-700 p-4">
           <div className="max-w-4xl mx-auto">
+            {!isActiveSession && (
+              <div className="mb-4 p-3 bg-yellow-900/20 border border-yellow-600/30 rounded-lg">
+                <p className="text-yellow-300 text-sm flex items-center gap-2">
+                  <span>📚</span>
+                  これは過去のセッション記録です。新しい対話はできません。
+                </p>
+              </div>
+            )}
+            
             <div className="flex space-x-2">
               <textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="メッセージを入力してください..."
-                className="flex-1 bg-gray-700 border border-gray-600 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400"
+                placeholder={isActiveSession ? "メッセージを入力してください..." : "過去のセッションでは入力できません"}
+                className={`flex-1 border rounded-lg p-3 resize-none focus:outline-none text-white placeholder-gray-400 ${
+                  isActiveSession 
+                    ? "bg-gray-700 border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+                    : "bg-gray-800 border-gray-500 cursor-not-allowed"
+                }`}
                 rows={3}
-                disabled={isLoading}
+                disabled={isLoading || !isActiveSession}
               />
               <button
                 onClick={sendMessage}
-                disabled={!inputValue.trim() || isLoading}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors"
+                disabled={!inputValue.trim() || isLoading || !isActiveSession}
+                className={`text-white px-6 py-3 rounded-lg transition-colors ${
+                  isActiveSession && !isLoading && inputValue.trim()
+                    ? "bg-blue-600 hover:bg-blue-500"
+                    : "bg-gray-600 cursor-not-allowed"
+                }`}
               >
-                送信
+                {isLoading ? "送信中..." : "送信"}
               </button>
             </div>
           </div>

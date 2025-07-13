@@ -27,7 +27,13 @@ export async function GET() {
       });
     });
 
-    return NextResponse.json({ sessionsByDirectory: sessionsByDir });
+    // 最新セッション（最後に更新されたセッション）を特定
+    const latestSession = sessions.length > 0 ? sessions[0] : null;
+    
+    return NextResponse.json({ 
+      sessionsByDirectory: sessionsByDir,
+      latestSessionId: latestSession?.sessionId || null
+    });
 
   } catch (error) {
     console.error('セッション取得エラー:', error);
