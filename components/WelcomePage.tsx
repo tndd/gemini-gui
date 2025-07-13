@@ -27,10 +27,7 @@ export default function WelcomePage() {
       const data = await response.json();
       setAvailableDirectories(data.directories || []);
       setRepositoryRoot(data.repositoryRoot || '');
-      // 最初のディレクトリを自動選択
-      if (data.directories && data.directories.length > 0) {
-        setSelectedDirectory(data.directories[0].path);
-      }
+      // 最初は未選択状態にする
     } catch (error) {
       console.error('ディレクトリ読み込みエラー:', error);
     }
@@ -130,23 +127,19 @@ export default function WelcomePage() {
                 {/* Repository配下のディレクトリ */}
                 {repositoryRoot && (
                   <div>
-                    <h3 className="text-sm font-medium text-gray-300 mb-2">~/Repository 配下のプロジェクト</h3>
-                    <div className="grid gap-2">
+                    <h3 className="text-sm font-medium text-gray-300 mb-3">~/Repository 配下のプロジェクト</h3>
+                    <select
+                      value={selectedDirectory}
+                      onChange={(e) => setSelectedDirectory(e.target.value)}
+                      className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                    >
+                      <option value="">ディレクトリを選択...</option>
                       {availableDirectories.map((dir) => (
-                        <button
-                          key={dir.path}
-                          onClick={() => setSelectedDirectory(dir.path)}
-                          className={`text-left p-3 rounded-lg transition-colors ${
-                            selectedDirectory === dir.path 
-                              ? 'bg-blue-600 text-white' 
-                              : 'bg-gray-700 hover:bg-gray-600'
-                          }`}
-                        >
-                          <span className="text-sm">📁 {dir.name}</span>
-                          <div className="text-xs text-gray-400 mt-1">{dir.path}</div>
-                        </button>
+                        <option key={dir.path} value={dir.path}>
+                          📁 {dir.name}
+                        </option>
                       ))}
-                    </div>
+                    </select>
                   </div>
                 )}
               </div>
@@ -154,37 +147,31 @@ export default function WelcomePage() {
 
             {/* チャット入力欄 */}
             <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">すぐにチャットを始める</h2>
-              <p className="text-gray-400 mb-4 text-sm">
-                選択したディレクトリ: {selectedDirectory || '未選択'}
-              </p>
+              <h2 className="text-xl font-semibold mb-3">すぐにチャットを始める</h2>
               
-              <div className="flex gap-3">
+              <div className="space-y-3">
                 <textarea
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="Geminiに質問してください..."
-                  className="flex-1 bg-gray-700 border border-gray-600 rounded-lg p-3 text-white placeholder-gray-400 resize-none"
-                  rows={3}
+                  className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-none"
+                  rows={2}
                   disabled={isLoading}
                 />
-                <button
-                  onClick={handleChatSubmit}
-                  disabled={!chatInput.trim() || isLoading}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg transition-colors flex items-center justify-center min-w-[80px]"
-                >
-                  {isLoading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    '送信'
-                  )}
-                </button>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-400">
+                    ディレクトリ: {selectedDirectory ? selectedDirectory.split('/').pop() : '未選択'}
+                  </span>
+                  <button
+                    onClick={handleChatSubmit}
+                    disabled={!chatInput.trim() || !selectedDirectory || isLoading}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm"
+                  >
+                    {isLoading ? '送信中...' : '送信'}
+                  </button>
+                </div>
               </div>
-              
-              <p className="text-xs text-gray-500 mt-2">
-                Enter で送信、Shift + Enter で改行
-              </p>
             </div>
 
           </div>
