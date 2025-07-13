@@ -57,23 +57,61 @@ export default function SessionHistory({
     if (!editingSessionName.trim()) return;
     
     try {
-      await fetch(`/api/sessions/${sessionId}`, {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: editingSessionName })
+        body: JSON.stringify({ name: editingSessionName })
       });
       
-      setEditingSessionId('');
-      setEditingSessionName('');
-      loadSessions();
+      if (response.ok) {
+        setEditingSessionId('');
+        setEditingSessionName('');
+        loadSessions();
+      } else {
+        const errorData = await response.json();
+        console.error('セッション名更新失敗:', errorData);
+        alert(`セッション名の更新に失敗しました: ${errorData.error}`);
+      }
     } catch (error) {
       console.error('セッション名更新エラー:', error);
+      alert('セッション名の更新中にエラーが発生しました。');
     }
   };
 
   const cancelEditing = () => {
     setEditingSessionId('');
     setEditingSessionName('');
+  };
+
+  const deleteSession = async (sessionId: string) => {
+    if (!confirm('このセッションを削除しますか？この操作は取り消せません。')) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // 編集状態をリセット
+        setEditingSessionId('');
+        setEditingSessionName('');
+        // セッション一覧を再読み込み
+        loadSessions();
+        
+        // 削除されたセッションが現在表示中の場合、ウェルカムページに戻る
+        if (window.location.pathname === `/chat/${sessionId}`) {
+          router.push('/');
+        }
+      } else {
+        const errorData = await response.json();
+        alert(`削除に失敗しました: ${errorData.error}`);
+      }
+    } catch (error) {
+      console.error('セッション削除エラー:', error);
+      alert('セッションの削除中にエラーが発生しました。');
+    }
   };
 
   const handleNewChatClick = () => {
@@ -138,6 +176,12 @@ export default function SessionHistory({
                             className="text-xs bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded"
                           >
                             キャンセル
+                          </button>
+                          <button
+                            onClick={() => deleteSession(session.id)}
+                            className="text-xs bg-red-600 hover:bg-red-500 px-2 py-1 rounded"
+                          >
+                            削除
                           </button>
                         </div>
                       </div>

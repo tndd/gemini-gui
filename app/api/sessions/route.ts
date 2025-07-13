@@ -27,8 +27,15 @@ export async function GET() {
       });
     });
 
-    // 最新セッション（最後に更新されたセッション）を特定
-    const latestSession = sessions.length > 0 ? sessions[0] : null;
+    // 最新セッション（メッセージがあるセッションの中で最後に更新されたもの）を特定
+    const latestSession = await prisma.session.findFirst({
+      where: {
+        messages: {
+          some: {} // メッセージが存在するセッションのみ
+        }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
     
     return NextResponse.json({ 
       sessionsByDirectory: sessionsByDir,

@@ -61,9 +61,26 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
       );
     }
 
-    const updateData: { name?: string; workingDirectory?: string } = {};
+    // 既存のセッション情報を取得
+    const existingSession = await prisma.session.findUnique({
+      where: { sessionId: params.sessionId }
+    });
+
+    if (!existingSession) {
+      return NextResponse.json(
+        { error: 'セッションが見つかりません' },
+        { status: 404 }
+      );
+    }
+
+    const updateData: { name?: string; workingDirectory?: string; updatedAt?: Date } = {};
     if (name) updateData.name = name;
     if (workingDirectory) updateData.workingDirectory = workingDirectory;
+    
+    // セッション名のみの変更の場合、updatedAtを元の値に保持
+    if (name && !workingDirectory) {
+      updateData.updatedAt = existingSession.updatedAt;
+    }
 
     const session = await prisma.session.update({
       where: { sessionId: params.sessionId },
@@ -81,6 +98,42 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
     console.error('セッション情報更新エラー:', error);
     return NextResponse.json(
       { error: 'セッション情報の更新でエラーが発生しました' },
+      { status: 500 }
+    );
+  }
+}
+
+// セッションの削除
+export async function DELETE(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
+  try {
+    const params = await context.params;
+    
+    // セッションが存在するかチェック
+    const existingSession = await prisma.session.findUnique({
+      where: { sessionId: params.sessionId }
+    });
+
+    if (!existingSession) {
+      return NextResponse.json(
+        { error: 'セッションが見つかりません' },
+        { status: 404 }
+      );
+    }
+
+    // セッションを削除（関連するメッセージも自動削除される：Prismaのcascade設定）
+    await prisma.session.delete({
+      where: { sessionId: params.sessionId }
+    });
+
+    return NextResponse.json({
+      message: 'セッションが削除されました',
+      sessionId: params.sessionId
+    });
+
+  } catch (error) {
+    console.error('セッション削除エラー:', error);
+    return NextResponse.json(
+      { error: 'セッションの削除でエラーが発生しました' },
       { status: 500 }
     );
   }
