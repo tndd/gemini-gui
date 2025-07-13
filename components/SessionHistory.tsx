@@ -16,18 +16,12 @@ interface GroupedSessions {
 }
 
 interface SessionHistoryProps {
-  onNewChatClick?: () => void;
   showNewChatButton?: boolean;
-  showDirectorySelector?: boolean;
-  onDirectorySelectorClick?: () => void;
   className?: string;
 }
 
 export default function SessionHistory({
-  onNewChatClick,
   showNewChatButton = true,
-  showDirectorySelector = false,
-  onDirectorySelectorClick,
   className = "w-80 bg-gray-800 border-r border-gray-700 flex flex-col"
 }: SessionHistoryProps) {
   const [groupedSessions, setGroupedSessions] = useState<GroupedSessions>({});
@@ -53,26 +47,6 @@ export default function SessionHistory({
     router.push(`/chat/${sessionId}`);
   };
 
-  const createNewSession = async () => {
-    const newSessionId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-    const sessionName = `新しいセッション ${new Date().toLocaleString('ja-JP')}`;
-    
-    try {
-      await fetch('/api/sessions/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: newSessionId,
-          name: sessionName,
-          workingDirectory: process.cwd()
-        })
-      });
-
-      router.push(`/chat/${newSessionId}`);
-    } catch (error) {
-      console.error('セッション作成エラー:', error);
-    }
-  };
 
   const startEditingSession = (sessionId: string, currentName: string) => {
     setEditingSessionId(sessionId);
@@ -103,11 +77,7 @@ export default function SessionHistory({
   };
 
   const handleNewChatClick = () => {
-    if (onNewChatClick) {
-      onNewChatClick();
-    } else {
-      createNewSession();
-    }
+    router.push('/');
   };
 
   return (
@@ -116,7 +86,7 @@ export default function SessionHistory({
         <h2 className="text-lg font-semibold">セッション履歴</h2>
       </div>
       
-      <div className="p-4 space-y-3 border-b border-gray-700">
+      <div className="p-4 border-b border-gray-700">
         {showNewChatButton && (
           <button
             onClick={handleNewChatClick}
@@ -124,16 +94,6 @@ export default function SessionHistory({
           >
             <span>+</span>
             新しいチャット
-          </button>
-        )}
-        
-        {showDirectorySelector && onDirectorySelectorClick && (
-          <button
-            onClick={onDirectorySelectorClick}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            <span>📁</span>
-            ディレクトリを選択
           </button>
         )}
       </div>

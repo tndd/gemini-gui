@@ -54,7 +54,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   }, [messages]);
 
   useEffect(() => {
-    loadSessions();
     // 初期セッションIDが指定されている場合、そのセッションの履歴を読み込む
     if (initialSessionId) {
       loadSessionHistory(initialSessionId);
@@ -280,9 +279,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
       {/* サイドバー */}
       {isSidebarOpen && (
         <SessionHistory
-          onNewChatClick={() => createNewSession()}
-          showDirectorySelector={true}
-          onDirectorySelectorClick={openDirectorySelector}
           className="w-80 bg-gray-900 border-r border-gray-700 flex flex-col transition-all duration-300"
         />
       )}
@@ -362,6 +358,14 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
               )}
             </div>
           </div>
+          
+          <button
+            onClick={openDirectorySelector}
+            className="bg-blue-600 hover:bg-blue-500 text-white py-1 px-3 rounded-lg transition-colors flex items-center gap-2 text-sm"
+          >
+            <span>📁</span>
+            ディレクトリ選択
+          </button>
         </div>
 
         {/* メッセージエリア */}
