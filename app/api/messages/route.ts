@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { spawn } from 'child_process';
 import { prisma } from '@/lib/prisma';
+import { getOrCreateGeminiProcess } from '@/lib/geminiProcessManager';
+import { setActiveSessionId } from '@/lib/activeSession';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +21,10 @@ export async function POST(request: NextRequest) {
 
     const finalWorkingDir = session?.workingDirectory || workingDirectory || process.cwd();
 
-    const geminiResponse = await executeGeminiCli(message, finalWorkingDir);
+    // メッセージ送信でこのセッションをアクティブに設定
+    setActiveSessionId(sessionId);
+
+    const geminiResponse = await executeGeminiCli(message, sessionId, finalWorkingDir);
 
     // セッションが存在しない場合は作成
     if (!session) {
@@ -64,37 +68,65 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function executeGeminiCli(message: string, workingDirectory?: string): Promise<string> {
+function executeGeminiCli(message: string, sessionId: string, workingDirectory?: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const geminiProcess = spawn('gemini', {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: workingDirectory || process.cwd()
-    });
+    // セッション別プロセスを取得（既存があれば再利用、なければ新規作成）
+    const geminiProcess = getOrCreateGeminiProcess(sessionId, workingDirectory);
 
     let output = '';
     let errorOutput = '';
+    let responseComplete = false;
 
-    geminiProcess.stdout.on('data', (data) => {
-      output += data.toString();
-    });
-
-    geminiProcess.stderr.on('data', (data) => {
-      errorOutput += data.toString();
-    });
-
-    geminiProcess.on('close', (code) => {
-      if (code === 0) {
-        resolve(output.trim());
-      } else {
-        reject(new Error(`Gemini CLI終了コード: ${code}, エラー: ${errorOutput}`));
+    const onData = (data: Buffer) => {
+      const text = data.toString();
+      output += text;
+      
+      // Gemini CLIの応答完了を検知（プロンプトが戻ってきたら完了）
+      // これはgemini cliの出力パターンに依存するため、調整が必要かもしれません
+      if (text.includes('> ') || text.endsWith('> ')) {
+        if (!responseComplete) {
+          responseComplete = true;
+          // リスナーを削除
+          geminiProcess.stdout.off('data', onData);
+          geminiProcess.stderr.off('data', onError);
+          
+          // プロンプト部分を除去して返答のみ抽出
+          const response = output.replace(/> $/, '').trim();
+          resolve(response);
+        }
       }
-    });
+    };
+
+    const onError = (data: Buffer) => {
+      errorOutput += data.toString();
+    };
+
+    const onExit = () => {
+      if (!responseComplete) {
+        reject(new Error(`Gemini CLI プロセスが予期せず終了しました。エラー: ${errorOutput}`));
+      }
+    };
+
+    geminiProcess.stdout.on('data', onData);
+    geminiProcess.stderr.on('data', onError);
+    geminiProcess.on('exit', onExit);
 
     geminiProcess.on('error', (error) => {
       reject(new Error(`Gemini CLI実行エラー: ${error.message}`));
     });
 
+    // メッセージ送信
     geminiProcess.stdin.write(message + '\n');
-    geminiProcess.stdin.end();
+    
+    // タイムアウト処理（30秒）
+    setTimeout(() => {
+      if (!responseComplete) {
+        responseComplete = true;
+        geminiProcess.stdout.off('data', onData);
+        geminiProcess.stderr.off('data', onError);
+        geminiProcess.off('exit', onExit);
+        reject(new Error('Gemini CLI応答タイムアウト'));
+      }
+    }, 30000);
   });
 }
