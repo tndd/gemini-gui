@@ -47,8 +47,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 現在のセッションが最新（アクティブ）かどうかを判定
-  // initialSessionIdが指定されている場合は常にアクティブセッションとして扱う
-  const isActiveSession = initialSessionId ? true : sessionId === latestSessionId;
+  const isActiveSession = sessionId === latestSessionId;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -59,15 +58,13 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   }, [messages]);
 
   useEffect(() => {
+    // 常にサーバーから最新セッションIDを取得
+    loadLatestSessionId();
+    
     // 初期セッションIDが指定されている場合、そのセッションの履歴を読み込む
     if (initialSessionId) {
       setSessionId(initialSessionId);
-      // 新しいセッションの場合は即座にアクティブに設定
-      setLatestSessionId(initialSessionId);
       loadSessionHistory(initialSessionId);
-    } else {
-      // 最新セッションIDを取得
-      loadLatestSessionId();
     }
   }, [initialSessionId]);
 
@@ -141,70 +138,9 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
     }
   };
 
-  const createNewSession = async (workingDirectory?: string, sessionName?: string) => {
-    // 現在のセッションが空の場合（メッセージがない場合）は新しいセッションを作成せずに現在のセッションを再利用
-    if (messages.length === 0 && sessionId) {
-      // 既存の空のセッションがある場合は、ディレクトリやセッション名だけ更新
-      const finalWorkingDir = workingDirectory || selectedDirectory || process.cwd();
-      const finalSessionName = sessionName || currentSessionName || `新しいセッション ${new Date().toLocaleString('ja-JP')}`;
-      
-      setCurrentWorkingDirectory(finalWorkingDir);
-      setCurrentSessionName(finalSessionName);
-      setShowDirectorySelector(false);
-      
-      // セッション名やディレクトリが変更された場合はデータベースを更新
-      if (workingDirectory || sessionName) {
-        try {
-          await fetch(`/api/sessions/${sessionId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: finalSessionName,
-              workingDirectory: finalWorkingDir
-            })
-          });
-          // 最新セッションIDを更新
-          setLatestSessionId(sessionId);
-        } catch (error) {
-          console.error('セッション更新エラー:', error);
-        }
-      } else {
-        // セッション再利用の場合も最新セッションとして設定
-        setLatestSessionId(sessionId);
-      }
-      return;
-    }
-
-    const newSessionId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-    const finalWorkingDir = workingDirectory || selectedDirectory || process.cwd();
-    const finalSessionName = sessionName || `新しいセッション ${new Date().toLocaleString('ja-JP')}`;
-    
-    try {
-      // セッションをデータベースに作成
-      await fetch('/api/sessions/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: newSessionId,
-          name: finalSessionName,
-          workingDirectory: finalWorkingDir
-        })
-      });
-
-      setSessionId(newSessionId);
-      setMessages([]);
-      setCurrentWorkingDirectory(finalWorkingDir);
-      setCurrentSessionName(finalSessionName);
-      setShowDirectorySelector(false);
-      
-      // 最新セッションIDを更新
-      setLatestSessionId(newSessionId);
-      
-      // 新しいセッションページに遷移
-      router.push(`/chat/${newSessionId}`);
-    } catch (error) {
-      console.error('セッション作成エラー:', error);
-    }
+  const createNewSession = () => {
+    // WelcomePageに遷移
+    router.push('/');
   };
 
   const selectSession = (session: SessionUI) => {
@@ -212,10 +148,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
     router.push(`/chat/${session.id}`);
   };
 
-  const openDirectorySelector = () => {
-    setShowDirectorySelector(true);
-    loadDirectories();
-  };
 
 
 
@@ -342,7 +274,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
 
             <div className="flex gap-2">
               <button
-                onClick={() => createNewSession(selectedDirectory)}
+                onClick={() => createNewSession()}
                 className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded transition-colors"
               >
                 新しいチャットを開始
