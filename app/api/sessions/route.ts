@@ -46,7 +46,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const { basePath } = await request.json();
-    const targetPath = basePath || process.cwd();
+    const repositoryPath = path.join(process.env.HOME || '~', 'Repository');
+    const targetPath = basePath || repositoryPath;
 
     const entries = await readdir(targetPath, { withFileTypes: true });
     const directories = entries
@@ -59,7 +60,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       currentPath: targetPath,
-      directories: directories
+      directories: directories,
+      repositoryRoot: repositoryPath
     });
 
   } catch (error) {

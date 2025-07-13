@@ -6,19 +6,15 @@ import SessionHistory from './SessionHistory';
 
 export default function WelcomePage() {
   const [selectedDirectory, setSelectedDirectory] = useState('');
-  const [availableDirectories, setAvailableDirectories] = useState<string[]>([]);
+  const [availableDirectories, setAvailableDirectories] = useState<{name: string, path: string}[]>([]);
   const [showDirectoryInput, setShowDirectoryInput] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [currentDirectory, setCurrentDirectory] = useState('');
+  const [repositoryRoot, setRepositoryRoot] = useState('');
   const router = useRouter();
 
   useEffect(() => {
     loadAvailableDirectories();
-    // 現在のディレクトリを取得
-    if (typeof window !== 'undefined') {
-      setCurrentDirectory('ブラウザ環境（サーバーの作業ディレクトリを使用）');
-    }
   }, []);
 
   const loadAvailableDirectories = async () => {
@@ -29,7 +25,12 @@ export default function WelcomePage() {
         body: JSON.stringify({})
       });
       const data = await response.json();
-      setAvailableDirectories(data.availableDirectories || []);
+      setAvailableDirectories(data.directories || []);
+      setRepositoryRoot(data.repositoryRoot || '');
+      // 最初のディレクトリを自動選択
+      if (data.directories && data.directories.length > 0) {
+        setSelectedDirectory(data.directories[0].path);
+      }
     } catch (error) {
       console.error('ディレクトリ読み込みエラー:', error);
     }
@@ -59,14 +60,17 @@ export default function WelcomePage() {
 
   const handleChatSubmit = async () => {
     if (!chatInput.trim() || isLoading) return;
+    if (!selectedDirectory) {
+      alert('作業ディレクトリを選択してください');
+      return;
+    }
     
     setIsLoading(true);
-    const currentDirectory = process.cwd();
     
     try {
       // 新しいセッションを作成
       const newSessionId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-      const sessionName = `新しいセッション ${new Date().toLocaleString('ja-JP')}`;
+      const sessionName = chatInput.substring(0, 50) + (chatInput.length > 50 ? '...' : '');
       
       await fetch('/api/sessions/create', {
         method: 'POST',
@@ -74,17 +78,18 @@ export default function WelcomePage() {
         body: JSON.stringify({
           sessionId: newSessionId,
           name: sessionName,
-          workingDirectory: currentDirectory
+          workingDirectory: selectedDirectory
         })
       });
 
       // メッセージを送信
-      await fetch('/api/messages', {
+      await fetch('/api/terminal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId: newSessionId,
-          message: chatInput.trim()
+          message: chatInput.trim(),
+          workingDirectory: selectedDirectory
         })
       });
 
@@ -121,68 +126,37 @@ export default function WelcomePage() {
             <div className="bg-gray-800 rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4">作業ディレクトリを選択</h2>
               
-              {!showDirectoryInput ? (
-                <div className="space-y-3">
-                  {/* 最近使用したディレクトリ */}
-                  {availableDirectories.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-300 mb-2">最近使用したディレクトリ</h3>
-                      <div className="grid gap-2">
-                        {availableDirectories.slice(0, 5).map((dir) => (
-                          <button
-                            key={dir}
-                            onClick={() => startNewChat(dir)}
-                            className="text-left p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-                          >
-                            <span className="text-sm">📁 {dir}</span>
-                          </button>
-                        ))}
-                      </div>
+              <div className="space-y-3">
+                {/* Repository配下のディレクトリ */}
+                {repositoryRoot && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-300 mb-2">~/Repository 配下のプロジェクト</h3>
+                    <div className="grid gap-2">
+                      {availableDirectories.map((dir) => (
+                        <button
+                          key={dir.path}
+                          onClick={() => setSelectedDirectory(dir.path)}
+                          className={`text-left p-3 rounded-lg transition-colors ${
+                            selectedDirectory === dir.path 
+                              ? 'bg-blue-600 text-white' 
+                              : 'bg-gray-700 hover:bg-gray-600'
+                          }`}
+                        >
+                          <span className="text-sm">📁 {dir.name}</span>
+                          <div className="text-xs text-gray-400 mt-1">{dir.path}</div>
+                        </button>
+                      ))}
                     </div>
-                  )}
-                  
-                  {/* 手動入力ボタン */}
-                  <button
-                    onClick={() => setShowDirectoryInput(true)}
-                    className="w-full p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
-                  >
-                    別のディレクトリを指定
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <input
-                    type="text"
-                    value={selectedDirectory}
-                    onChange={(e) => setSelectedDirectory(e.target.value)}
-                    placeholder="作業ディレクトリのパスを入力..."
-                    className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400"
-                    autoFocus
-                  />
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => startNewChat()}
-                      disabled={!selectedDirectory}
-                      className="flex-1 p-3 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                    >
-                      チャットを開始
-                    </button>
-                    <button
-                      onClick={() => setShowDirectoryInput(false)}
-                      className="px-6 p-3 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
-                    >
-                      キャンセル
-                    </button>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             {/* チャット入力欄 */}
             <div className="bg-gray-800 rounded-lg p-6">
               <h2 className="text-xl font-semibold mb-4">すぐにチャットを始める</h2>
               <p className="text-gray-400 mb-4 text-sm">
-                {currentDirectory || 'サーバーの作業ディレクトリ'}でチャットを開始します
+                選択したディレクトリ: {selectedDirectory || '未選択'}
               </p>
               
               <div className="flex gap-3">
