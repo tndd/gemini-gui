@@ -4,7 +4,7 @@ import dbManager from '@/lib/database';
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, sessionId } = await request.json();
+    const { message, sessionId, workingDirectory } = await request.json();
 
     if (!message || !sessionId) {
       return NextResponse.json(
@@ -16,14 +16,19 @@ export async function POST(request: NextRequest) {
     // データベースの初期化
     dbManager.init();
 
+    // 既存セッションの作業ディレクトリを取得、なければ引数から、それもなければ現在のディレクトリ
+    const sessionWorkingDir = dbManager.getSessionWorkingDirectory(sessionId);
+    const finalWorkingDir = sessionWorkingDir || workingDirectory || process.cwd();
+
     // gemini-cliを実行
-    const geminiResponse = await executeGeminiCli(message);
+    const geminiResponse = await executeGeminiCli(message, finalWorkingDir);
 
     // 結果をデータベースに保存
-    dbManager.saveConversation(message, geminiResponse, sessionId);
+    dbManager.saveConversation(message, geminiResponse, sessionId, finalWorkingDir);
 
     return NextResponse.json({
       response: geminiResponse,
+      workingDirectory: finalWorkingDir,
       timestamp: new Date().toISOString()
     });
 
@@ -36,10 +41,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function executeGeminiCli(message: string): Promise<string> {
+function executeGeminiCli(message: string, workingDirectory?: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const geminiProcess = spawn('gemini', {
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: workingDirectory || process.cwd()
     });
 
     let output = '';

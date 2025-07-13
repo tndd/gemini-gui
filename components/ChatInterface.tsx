@@ -15,17 +15,27 @@ interface Session {
   title: string;
   lastMessage: string;
   timestamp: string;
+  workingDirectory?: string;
+}
+
+interface DirectoryInfo {
+  name: string;
+  path: string;
 }
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsByDirectory, setSessionsByDirectory] = useState<{ [directory: string]: Session[] }>({});
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [showDirectorySelector, setShowDirectorySelector] = useState(false);
+  const [selectedDirectory, setSelectedDirectory] = useState<string>('');
+  const [availableDirectories, setAvailableDirectories] = useState<DirectoryInfo[]>([]);
   const [sessionId, setSessionId] = useState(() => 
     crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
   );
+  const [currentWorkingDirectory, setCurrentWorkingDirectory] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -42,30 +52,34 @@ export default function ChatInterface() {
 
   const loadSessions = async () => {
     try {
-      const response = await fetch('/api/gemini');
+      const response = await fetch('/api/sessions');
       const data = await response.json();
       
-      if (data.conversations) {
-        // セッションごとにグループ化
-        const sessionMap = new Map<string, Session>();
-        
-        data.conversations.forEach((conv: any) => {
-          if (!sessionMap.has(conv.session_id)) {
-            sessionMap.set(conv.session_id, {
-              id: conv.session_id,
-              title: conv.user_input.substring(0, 30) + (conv.user_input.length > 30 ? '...' : ''),
-              lastMessage: conv.user_input,
-              timestamp: conv.timestamp
-            });
-          }
-        });
-        
-        setSessions(Array.from(sessionMap.values()).sort((a, b) => 
-          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        ));
+      if (data.sessionsByDirectory) {
+        setSessionsByDirectory(data.sessionsByDirectory);
       }
     } catch (error) {
       console.error('セッション読み込みエラー:', error);
+    }
+  };
+
+  const loadDirectories = async (basePath?: string) => {
+    try {
+      const response = await fetch('/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ basePath })
+      });
+      const data = await response.json();
+      
+      if (data.directories) {
+        setAvailableDirectories(data.directories);
+        if (!selectedDirectory) {
+          setSelectedDirectory(data.currentPath);
+        }
+      }
+    } catch (error) {
+      console.error('ディレクトリ読み込みエラー:', error);
     }
   };
 
@@ -97,16 +111,24 @@ export default function ChatInterface() {
     }
   };
 
-  const createNewSession = () => {
+  const createNewSession = (workingDirectory?: string) => {
     const newSessionId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
     setSessionId(newSessionId);
     setMessages([]);
+    setCurrentWorkingDirectory(workingDirectory || selectedDirectory || '');
+    setShowDirectorySelector(false);
     loadSessions();
   };
 
   const selectSession = (session: Session) => {
     setSessionId(session.id);
+    setCurrentWorkingDirectory(session.workingDirectory || '');
     loadSessionHistory(session.id);
+  };
+
+  const openDirectorySelector = () => {
+    setShowDirectorySelector(true);
+    loadDirectories();
   };
 
   const sendMessage = async () => {
@@ -132,7 +154,8 @@ export default function ChatInterface() {
         },
         body: JSON.stringify({
           message: currentInput,
-          sessionId: sessionId
+          sessionId: sessionId,
+          workingDirectory: currentWorkingDirectory
         }),
       });
 
@@ -176,36 +199,100 @@ export default function ChatInterface() {
   return (
     <div className="flex h-screen bg-gray-800 text-white">
       {/* サイドバー */}
-      <div className={`${isSidebarOpen ? 'w-64' : 'w-0'} transition-all duration-300 bg-gray-900 border-r border-gray-700 flex flex-col overflow-hidden`}>
-        <div className="p-4 border-b border-gray-700">
+      <div className={`${isSidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 bg-gray-900 border-r border-gray-700 flex flex-col overflow-hidden`}>
+        <div className="p-4 border-b border-gray-700 space-y-2">
           <button
-            onClick={createNewSession}
+            onClick={() => createNewSession()}
             className="w-full bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
           >
             <span>+</span>
             新しいチャット
           </button>
+          <button
+            onClick={openDirectorySelector}
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <span>📁</span>
+            ディレクトリを選択
+          </button>
         </div>
         
         <div className="flex-1 overflow-y-auto p-2">
-          {sessions.map((session) => (
-            <div
-              key={session.id}
-              onClick={() => selectSession(session)}
-              className={`p-3 rounded-lg cursor-pointer mb-2 transition-colors ${
-                session.id === sessionId 
-                  ? 'bg-gray-700' 
-                  : 'hover:bg-gray-800'
-              }`}
-            >
-              <div className="text-sm font-medium truncate">{session.title}</div>
-              <div className="text-xs text-gray-400 mt-1">
-                {new Date(session.timestamp).toLocaleDateString('ja-JP')}
+          {Object.entries(sessionsByDirectory).map(([directory, sessions]) => (
+            <div key={directory} className="mb-4">
+              <div className="text-xs text-gray-400 px-2 py-1 font-medium truncate">
+                📁 {directory.split('/').pop() || directory}
               </div>
+              <div className="text-xs text-gray-500 px-2 mb-2 truncate">
+                {directory}
+              </div>
+              {sessions.map((session) => (
+                <div
+                  key={session.id}
+                  onClick={() => selectSession(session)}
+                  className={`p-3 rounded-lg cursor-pointer mb-2 ml-2 transition-colors ${
+                    session.id === sessionId 
+                      ? 'bg-gray-700' 
+                      : 'hover:bg-gray-800'
+                  }`}
+                >
+                  <div className="text-sm font-medium truncate">{session.title}</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {new Date(session.timestamp).toLocaleDateString('ja-JP')}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>
       </div>
+
+      {/* ディレクトリ選択モーダル */}
+      {showDirectorySelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-6 w-96 max-h-96 overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4 text-white">作業ディレクトリを選択</h3>
+            
+            <div className="mb-4">
+              <input
+                type="text"
+                value={selectedDirectory}
+                onChange={(e) => setSelectedDirectory(e.target.value)}
+                placeholder="ディレクトリパスを入力..."
+                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
+              />
+            </div>
+
+            <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
+              {availableDirectories.map((dir) => (
+                <div
+                  key={dir.path}
+                  onClick={() => setSelectedDirectory(dir.path)}
+                  className="p-2 bg-gray-700 hover:bg-gray-600 rounded cursor-pointer transition-colors"
+                >
+                  <div className="text-sm text-white">📁 {dir.name}</div>
+                  <div className="text-xs text-gray-400 truncate">{dir.path}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => createNewSession(selectedDirectory)}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded transition-colors"
+              >
+                新しいチャットを開始
+              </button>
+              <button
+                onClick={() => setShowDirectorySelector(false)}
+                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded transition-colors"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* メインコンテンツエリア */}
       <div className="flex-1 flex flex-col">
@@ -220,7 +307,17 @@ export default function ChatInterface() {
             </button>
             <div>
               <h1 className="text-lg font-semibold text-white">Gemini GUI</h1>
-              <p className="text-sm text-gray-400">Gemini CLIのGUIラッパー</p>
+              <p className="text-sm text-gray-400">
+                {currentWorkingDirectory ? 
+                  `📁 ${currentWorkingDirectory.split('/').pop() || currentWorkingDirectory}` : 
+                  'Gemini CLIのGUIラッパー'
+                }
+              </p>
+              {currentWorkingDirectory && (
+                <p className="text-xs text-gray-500 truncate max-w-md">
+                  {currentWorkingDirectory}
+                </p>
+              )}
             </div>
           </div>
         </div>
