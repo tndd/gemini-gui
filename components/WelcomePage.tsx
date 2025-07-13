@@ -15,7 +15,19 @@ export default function WelcomePage() {
 
   useEffect(() => {
     loadAvailableDirectories();
-  }, []);
+    
+    // 外側クリックでドロップダウンを閉じる
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showDirectoryInput && !(event.target as Element).closest('.relative')) {
+        setShowDirectoryInput(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDirectoryInput]);
 
   const loadAvailableDirectories = async () => {
     try {
@@ -133,13 +145,41 @@ export default function WelcomePage() {
                 disabled={isLoading}
               />
               <div className="flex justify-between items-center">
-                <button
-                  onClick={() => setShowDirectoryInput(true)}
-                  className="text-xs text-gray-400 hover:text-gray-300 transition-colors flex items-center gap-1"
-                >
-                  📁 {selectedDirectory ? selectedDirectory.split('/').pop() : 'ディレクトリを選択'}
-                  <span className="text-gray-500">▼</span>
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowDirectoryInput(true)}
+                    className="text-xs text-gray-400 hover:text-gray-300 transition-colors flex items-center gap-1"
+                  >
+                    📁 {selectedDirectory ? selectedDirectory.split('/').pop() : 'ディレクトリを選択'}
+                    <span className="text-gray-500">▼</span>
+                  </button>
+                  
+                  {/* ディレクトリ選択ドロップダウン */}
+                  {showDirectoryInput && (
+                    <div className="absolute top-full left-0 mt-1 bg-gray-800 rounded-lg shadow-lg border border-gray-600 p-3 w-64 z-50">
+                      <h3 className="text-xs font-semibold mb-2 text-gray-300">作業ディレクトリを選択</h3>
+                      
+                      {repositoryRoot && (
+                        <div className="space-y-1">
+                          <div className="max-h-32 overflow-y-auto space-y-1">
+                            {availableDirectories.map((dir) => (
+                              <button
+                                key={dir.path}
+                                onClick={() => {
+                                  setSelectedDirectory(dir.path);
+                                  setShowDirectoryInput(false);
+                                }}
+                                className="w-full text-left p-2 bg-gray-700 hover:bg-gray-600 rounded text-xs transition-colors"
+                              >
+                                <div className="font-medium">📁 {dir.name}</div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={handleChatSubmit}
                   disabled={!chatInput.trim() || !selectedDirectory || isLoading}
@@ -151,43 +191,6 @@ export default function WelcomePage() {
             </div>
           </div>
 
-          {/* ディレクトリ選択モーダル */}
-          {showDirectoryInput && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
-                <h3 className="text-lg font-semibold mb-4">作業ディレクトリを選択</h3>
-                
-                {repositoryRoot && (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-400 mb-3">~/Repository 配下のプロジェクト:</p>
-                    <div className="max-h-60 overflow-y-auto space-y-2">
-                      {availableDirectories.map((dir) => (
-                        <button
-                          key={dir.path}
-                          onClick={() => {
-                            setSelectedDirectory(dir.path);
-                            setShowDirectoryInput(false);
-                          }}
-                          className="w-full text-left p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-                        >
-                          <div className="font-medium">📁 {dir.name}</div>
-                          <div className="text-xs text-gray-400">{dir.path}</div>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex gap-3 mt-4">
-                      <button
-                        onClick={() => setShowDirectoryInput(false)}
-                        className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
-                      >
-                        キャンセル
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
