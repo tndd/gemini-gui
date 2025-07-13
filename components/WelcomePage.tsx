@@ -113,68 +113,81 @@ export default function WelcomePage() {
       {/* 右側：メインコンテンツ */}
       <div className="flex-1 flex items-center justify-center">
         <div className="max-w-2xl w-full p-8">
-          <div className="text-center mb-8">
+          <div className="text-center mb-12">
             <h1 className="text-4xl font-bold mb-4">Gemini GUI</h1>
             <p className="text-gray-400">新しいチャットを開始するか、既存のセッションを選択してください</p>
           </div>
 
-          <div className="space-y-6">
-            {/* パス選択エリア */}
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">作業ディレクトリを選択</h2>
-              
-              <div className="space-y-3">
-                {/* Repository配下のディレクトリ */}
+          {/* チャット入力欄 - 中央配置 */}
+          <div className="bg-gray-800 rounded-lg p-8 max-w-xl mx-auto">
+            <h2 className="text-2xl font-semibold mb-6 text-center">新しいチャットを開始</h2>
+            
+            <div className="space-y-4">
+              <textarea
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Geminiに質問してください..."
+                className="w-full p-4 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-none text-base"
+                rows={3}
+                disabled={isLoading}
+              />
+              <div className="flex justify-between items-center">
+                <button
+                  onClick={() => setShowDirectoryInput(true)}
+                  className="text-xs text-gray-400 hover:text-gray-300 transition-colors flex items-center gap-1"
+                >
+                  📁 {selectedDirectory ? selectedDirectory.split('/').pop() : 'ディレクトリを選択'}
+                  <span className="text-gray-500">▼</span>
+                </button>
+                <button
+                  onClick={handleChatSubmit}
+                  disabled={!chatInput.trim() || !selectedDirectory || isLoading}
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                >
+                  {isLoading ? '送信中...' : '送信'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ディレクトリ選択モーダル */}
+          {showDirectoryInput && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+                <h3 className="text-lg font-semibold mb-4">作業ディレクトリを選択</h3>
+                
                 {repositoryRoot && (
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-300 mb-3">~/Repository 配下のプロジェクト</h3>
-                    <select
-                      value={selectedDirectory}
-                      onChange={(e) => setSelectedDirectory(e.target.value)}
-                      className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white"
-                    >
-                      <option value="">ディレクトリを選択...</option>
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-400 mb-3">~/Repository 配下のプロジェクト:</p>
+                    <div className="max-h-60 overflow-y-auto space-y-2">
                       {availableDirectories.map((dir) => (
-                        <option key={dir.path} value={dir.path}>
-                          📁 {dir.name}
-                        </option>
+                        <button
+                          key={dir.path}
+                          onClick={() => {
+                            setSelectedDirectory(dir.path);
+                            setShowDirectoryInput(false);
+                          }}
+                          className="w-full text-left p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                        >
+                          <div className="font-medium">📁 {dir.name}</div>
+                          <div className="text-xs text-gray-400">{dir.path}</div>
+                        </button>
                       ))}
-                    </select>
+                    </div>
+                    <div className="flex gap-3 mt-4">
+                      <button
+                        onClick={() => setShowDirectoryInput(false)}
+                        className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
+                      >
+                        キャンセル
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
-
-            {/* チャット入力欄 */}
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-3">すぐにチャットを始める</h2>
-              
-              <div className="space-y-3">
-                <textarea
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Geminiに質問してください..."
-                  className="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-none"
-                  rows={2}
-                  disabled={isLoading}
-                />
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-400">
-                    ディレクトリ: {selectedDirectory ? selectedDirectory.split('/').pop() : '未選択'}
-                  </span>
-                  <button
-                    onClick={handleChatSubmit}
-                    disabled={!chatInput.trim() || !selectedDirectory || isLoading}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm"
-                  >
-                    {isLoading ? '送信中...' : '送信'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-          </div>
+          )}
         </div>
       </div>
     </div>
