@@ -5,10 +5,10 @@ import { useRouter } from 'next/navigation';
 
 interface SessionUI {
   id: string;
-  name: string;
+  title: string;
   workingDirectory: string;
   createdAt: string;
-  messageCount: number;
+  timestamp: string;
 }
 
 interface GroupedSessions {
@@ -37,7 +37,7 @@ export default function SessionHistory({
     try {
       const response = await fetch('/api/sessions');
       const data = await response.json();
-      setGroupedSessions(data.groupedSessions || {});
+      setGroupedSessions(data.sessionsByDirectory || {});
     } catch (error) {
       console.error('セッション読み込みエラー:', error);
     }
@@ -48,9 +48,9 @@ export default function SessionHistory({
   };
 
 
-  const startEditingSession = (sessionId: string, currentName: string) => {
+  const startEditingSession = (sessionId: string, currentTitle: string) => {
     setEditingSessionId(sessionId);
-    setEditingSessionName(currentName);
+    setEditingSessionName(currentTitle);
   };
 
   const saveSessionName = async (sessionId: string) => {
@@ -60,7 +60,7 @@ export default function SessionHistory({
       await fetch(`/api/sessions/${sessionId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editingSessionName })
+        body: JSON.stringify({ title: editingSessionName })
       });
       
       setEditingSessionId('');
@@ -147,15 +147,15 @@ export default function SessionHistory({
                         onClick={() => selectSession(session.id)}
                       >
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{session.name}</div>
+                          <div className="font-medium text-sm truncate">{session.title}</div>
                           <div className="text-xs text-gray-400 mt-1">
-                            {new Date(session.createdAt).toLocaleDateString('ja-JP')} • {session.messageCount}件
+                            {new Date(session.createdAt).toLocaleDateString('ja-JP')}
                           </div>
                         </div>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            startEditingSession(session.id, session.name);
+                            startEditingSession(session.id, session.title);
                           }}
                           className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-white text-xs p-1"
                           title="編集"
