@@ -44,3 +44,6 @@ next-env.d.ts
 gemini-gui.db
 
 /lib/generated/prisma
+
+# mcp
+.mcp.json
