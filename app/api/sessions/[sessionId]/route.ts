@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 // セッション情報の取得
-export async function GET(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
+export async function GET(request: NextRequest, context: { params: { sessionId: string } }) {
   try {
-    const params = await context.params;
+    const { sessionId } = context.params;
     
     const session = await prisma.session.findUnique({
-      where: { sessionId: params.sessionId },
+      where: { sessionId },
       include: {
         messages: {
           orderBy: { timestamp: 'asc' }
@@ -49,9 +49,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ses
 }
 
 // セッション情報の更新
-export async function PATCH(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
+export async function PATCH(request: NextRequest, context: { params: { sessionId: string } }) {
   try {
-    const params = await context.params;
+    const { sessionId } = context.params;
     const { name, workingDirectory } = await request.json();
 
     if (!name && !workingDirectory) {
@@ -87,13 +87,13 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
 }
 
 // セッションの削除
-export async function DELETE(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
+export async function DELETE(request: NextRequest, context: { params: { sessionId: string } }) {
   try {
-    const params = await context.params;
+    const { sessionId } = context.params;
     
     // セッションが存在するかチェック
     const existingSession = await prisma.session.findUnique({
-      where: { sessionId: params.sessionId }
+      where: { sessionId }
     });
 
     if (!existingSession) {

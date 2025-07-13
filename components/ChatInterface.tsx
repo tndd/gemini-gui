@@ -195,7 +195,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
       {/* サイドバー */}
       {isSidebarOpen && (
         <SessionHistory
-          className="w-80 bg-gray-900 border-r border-gray-700 flex flex-col transition-all duration-300"
+          className="w-1/4 bg-gray-900 border-r border-gray-700 flex flex-col transition-all duration-300"
         />
       )}
 
