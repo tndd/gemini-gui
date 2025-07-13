@@ -1,29 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import dbManager from '@/lib/database';
+import { prisma } from '@/lib/prisma';
 import { readdir } from 'fs/promises';
 import path from 'path';
 
 // セッション情報の取得（ディレクトリ別グループ化）
 export async function GET() {
   try {
-    dbManager.init();
-
-    const sessionsByDir = dbManager.getSessionsByWorkingDirectory();
+    const sessions = await prisma.session.findMany({
+      orderBy: { updatedAt: 'desc' }
+    });
     
-    // セッション情報を整理
-    const formattedSessions: { [directory: string]: any[] } = {};
+    // ディレクトリ別にグループ化
+    const sessionsByDir: { [directory: string]: any[] } = {};
     
-    for (const [directory, sessions] of Object.entries(sessionsByDir)) {
-      formattedSessions[directory] = sessions.map(session => ({
-        id: session.session_id,
+    sessions.forEach(session => {
+      const dir = session.workingDirectory;
+      if (!sessionsByDir[dir]) {
+        sessionsByDir[dir] = [];
+      }
+      sessionsByDir[dir].push({
+        id: session.sessionId,
         title: session.name,
-        timestamp: session.updated_at,
-        workingDirectory: session.working_directory,
-        createdAt: session.created_at
-      }));
-    }
+        timestamp: session.updatedAt.toISOString(),
+        workingDirectory: session.workingDirectory,
+        createdAt: session.createdAt.toISOString()
+      });
+    });
 
-    return NextResponse.json({ sessionsByDirectory: formattedSessions });
+    return NextResponse.json({ sessionsByDirectory: sessionsByDir });
 
   } catch (error) {
     console.error('セッション取得エラー:', error);

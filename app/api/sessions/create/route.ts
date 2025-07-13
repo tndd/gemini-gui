@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import dbManager from '@/lib/database';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,13 +12,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    dbManager.init();
-    dbManager.createSession(sessionId, name, workingDirectory);
+    const session = await prisma.session.create({
+      data: {
+        sessionId,
+        name,
+        workingDirectory,
+      }
+    });
 
     return NextResponse.json({
-      sessionId,
-      name,
-      workingDirectory,
+      sessionId: session.sessionId,
+      name: session.name,
+      workingDirectory: session.workingDirectory,
       message: 'セッションが作成されました'
     });
 

@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import dbManager from '@/lib/database';
+import { prisma } from '@/lib/prisma';
 
 // セッション情報の取得
 export async function GET(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
   try {
     const params = await context.params;
-    dbManager.init();
     
-    const session = dbManager.getSession(params.sessionId);
+    const session = await prisma.session.findUnique({
+      where: { sessionId: params.sessionId },
+      include: {
+        messages: {
+          orderBy: { timestamp: 'asc' }
+        }
+      }
+    });
+
     if (!session) {
       return NextResponse.json(
         { error: 'セッションが見つかりません' },
@@ -15,11 +22,21 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ses
       );
     }
 
-    const messages = dbManager.getSessionMessages(params.sessionId);
-
     return NextResponse.json({
-      session,
-      messages
+      session: {
+        sessionId: session.sessionId,
+        name: session.name,
+        workingDirectory: session.workingDirectory,
+        createdAt: session.createdAt.toISOString(),
+        updatedAt: session.updatedAt.toISOString()
+      },
+      messages: session.messages.map(msg => ({
+        id: msg.id,
+        sessionId: msg.sessionId,
+        user_input: msg.userInput,
+        gemini_response: msg.geminiResponse,
+        timestamp: msg.timestamp.toISOString()
+      }))
     });
 
   } catch (error) {
@@ -44,12 +61,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
       );
     }
 
-    dbManager.init();
-    dbManager.updateSessionName(params.sessionId, name);
+    const session = await prisma.session.update({
+      where: { sessionId: params.sessionId },
+      data: { name }
+    });
 
     return NextResponse.json({
-      sessionId: params.sessionId,
-      name,
+      sessionId: session.sessionId,
+      name: session.name,
       message: 'セッション名が更新されました'
     });
 

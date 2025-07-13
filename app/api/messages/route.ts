@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
-import dbManager from '@/lib/database';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,14 +13,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    dbManager.init();
+    // セッション情報を取得
+    const session = await prisma.session.findUnique({
+      where: { sessionId }
+    });
 
-    const sessionWorkingDir = dbManager.getSessionWorkingDirectory(sessionId);
-    const finalWorkingDir = sessionWorkingDir || workingDirectory || process.cwd();
+    const finalWorkingDir = session?.workingDirectory || workingDirectory || process.cwd();
 
     const geminiResponse = await executeGeminiCli(message, finalWorkingDir);
 
-    dbManager.saveConversation(message, geminiResponse, sessionId, finalWorkingDir);
+    // セッションが存在しない場合は作成
+    if (!session) {
+      const sessionName = message.substring(0, 50) + (message.length > 50 ? '...' : '');
+      await prisma.session.create({
+        data: {
+          sessionId,
+          name: sessionName,
+          workingDirectory: finalWorkingDir,
+        }
+      });
+    }
+
+    // メッセージを保存
+    await prisma.message.create({
+      data: {
+        sessionId,
+        userInput: message,
+        geminiResponse,
+      }
+    });
+
+    // セッションの更新時刻を更新
+    await prisma.session.update({
+      where: { sessionId },
+      data: { updatedAt: new Date() }
+    });
 
     return NextResponse.json({
       response: geminiResponse,
