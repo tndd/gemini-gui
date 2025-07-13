@@ -1,7 +1,7 @@
 import * as pty from 'node-pty';
 
 // セッションIDとptyプロセスのマッピング
-const sessionTerminals = new Map<string, pty.IPty>();
+export const sessionTerminals = new Map<string, pty.IPty>();
 
 export const getOrCreateTerminal = (sessionId: string, workingDirectory?: string): pty.IPty => {
   // 既存ターミナルがあればそれを返す

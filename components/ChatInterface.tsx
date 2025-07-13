@@ -47,7 +47,8 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 現在のセッションが最新（アクティブ）かどうかを判定
-  const isActiveSession = sessionId === latestSessionId;
+  // initialSessionIdが指定されている場合は常にアクティブセッションとして扱う
+  const isActiveSession = initialSessionId ? true : sessionId === latestSessionId;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -60,11 +61,15 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   useEffect(() => {
     // 初期セッションIDが指定されている場合、そのセッションの履歴を読み込む
     if (initialSessionId) {
+      setSessionId(initialSessionId);
+      // 新しいセッションの場合は即座にアクティブに設定
+      setLatestSessionId(initialSessionId);
       loadSessionHistory(initialSessionId);
+    } else {
+      // 最新セッションIDを取得
+      loadLatestSessionId();
     }
-    // 最新セッションIDを取得
-    loadLatestSessionId();
-  }, []);
+  }, [initialSessionId]);
 
   const loadLatestSessionId = async () => {
     try {

@@ -87,7 +87,8 @@ export default function WelcomePage() {
         body: JSON.stringify({
           sessionId: newSessionId,
           name: sessionName,
-          workingDirectory: selectedDirectory
+          workingDirectory: selectedDirectory,
+          // 事前初期化は不要
         })
       });
 
