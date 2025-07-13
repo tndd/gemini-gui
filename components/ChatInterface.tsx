@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import SessionHistory from './SessionHistory';
 
@@ -12,32 +11,16 @@ interface Message {
   timestamp: string;
 }
 
-interface SessionUI {
-  id: string;
-  title: string;
-  timestamp: string;
-  workingDirectory: string;
-  createdAt: string;
-}
-
-interface DirectoryInfo {
-  name: string;
-  path: string;
-}
 
 interface ChatInterfaceProps {
   initialSessionId?: string;
 }
 
 export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) {
-  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [showDirectorySelector, setShowDirectorySelector] = useState(false);
-  const [selectedDirectory, setSelectedDirectory] = useState<string>('');
-  const [availableDirectories, setAvailableDirectories] = useState<DirectoryInfo[]>([]);
   const [sessionId, setSessionId] = useState(() => 
     initialSessionId || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString())
   );
@@ -87,25 +70,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   }, [initialSessionId]);
 
 
-  const loadDirectories = async (basePath?: string) => {
-    try {
-      const response = await fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ basePath })
-      });
-      const data = await response.json();
-      
-      if (data.directories) {
-        setAvailableDirectories(data.directories);
-        if (!selectedDirectory) {
-          setSelectedDirectory(data.currentPath);
-        }
-      }
-    } catch (error) {
-      console.error('ディレクトリ読み込みエラー:', error);
-    }
-  };
 
   const loadSessionHistory = async (sessionId: string) => {
     try {
@@ -138,15 +102,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
     }
   };
 
-  const createNewSession = () => {
-    // WelcomePageに遷移
-    router.push('/');
-  };
 
-  const selectSession = (session: SessionUI) => {
-    // ページ遷移でセッションを切り替える
-    router.push(`/chat/${session.id}`);
-  };
 
 
 
@@ -235,7 +191,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   };
 
   return (
-    <div className="flex h-screen bg-gray-800 text-white">
+    <div className="flex h-screen bg-gray-800 text-white overflow-hidden">
       {/* サイドバー */}
       {isSidebarOpen && (
         <SessionHistory
@@ -243,55 +199,9 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
         />
       )}
 
-      {/* ディレクトリ選択モーダル */}
-      {showDirectorySelector && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-96 max-h-96 overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4 text-white">作業ディレクトリを選択</h3>
-            
-            <div className="mb-4">
-              <input
-                type="text"
-                value={selectedDirectory}
-                onChange={(e) => setSelectedDirectory(e.target.value)}
-                placeholder="ディレクトリパスを入力..."
-                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white"
-              />
-            </div>
-
-            <div className="space-y-2 mb-4 max-h-48 overflow-y-auto">
-              {availableDirectories.map((dir) => (
-                <div
-                  key={dir.path}
-                  onClick={() => setSelectedDirectory(dir.path)}
-                  className="p-2 bg-gray-700 hover:bg-gray-600 rounded cursor-pointer transition-colors"
-                >
-                  <div className="text-sm text-white">📁 {dir.name}</div>
-                  <div className="text-xs text-gray-400 truncate">{dir.path}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => createNewSession()}
-                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded transition-colors"
-              >
-                新しいチャットを開始
-              </button>
-              <button
-                onClick={() => setShowDirectorySelector(false)}
-                className="flex-1 bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded transition-colors"
-              >
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* メインコンテンツエリア */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* ヘッダー */}
         <div className="bg-gray-900 border-b border-gray-700 p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -322,7 +232,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
         </div>
 
         {/* メッセージエリア */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6">
           {messages.length === 0 && (
             <div className="text-center text-gray-400 mt-8">
               <p>Geminiに質問してみてください</p>
@@ -334,27 +244,27 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
               key={message.id}
               className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div className={`max-w-[70%] ${message.sender === 'user' ? '' : 'flex gap-3'}`}>
+              <div className={`max-w-[70%] min-w-0 ${message.sender === 'user' ? '' : 'flex gap-3'}`}>
                 {message.sender === 'assistant' && (
                   <div className="w-8 h-8 bg-green-600 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
                     G
                   </div>
                 )}
                 <div
-                  className={`rounded-lg p-4 ${
+                  className={`rounded-lg p-4 break-words overflow-hidden ${
                     message.sender === 'user'
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-700 text-gray-100'
                   }`}
                 >
                   {message.sender === 'assistant' ? (
-                    <div className="prose prose-invert prose-sm max-w-none">
+                    <div className="prose prose-invert prose-sm max-w-none break-words">
                       <ReactMarkdown 
                         components={{
                           code: (props) => {
-                            const { children, className } = props;
+                            const { children } = props;
                             return (
-                              <code className="bg-gray-800 text-green-400 px-1 py-0.5 rounded text-sm">
+                              <code className="bg-gray-800 text-green-400 px-1 py-0.5 rounded text-sm break-all">
                                 {children}
                               </code>
                             );
@@ -362,7 +272,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
                           pre: (props) => {
                             const { children } = props;
                             return (
-                              <pre className="bg-gray-800 text-green-400 p-3 rounded overflow-x-auto">
+                              <pre className="bg-gray-800 text-green-400 p-3 rounded overflow-x-auto whitespace-pre-wrap break-words">
                                 {children}
                               </pre>
                             );
@@ -423,7 +333,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
               <textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyPress}
                 placeholder={isActiveSession ? "メッセージを入力してください..." : "過去のセッションでは入力できません"}
                 className={`flex-1 border rounded-lg p-3 resize-none focus:outline-none text-white placeholder-gray-400 ${
                   isActiveSession 
