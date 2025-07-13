@@ -48,34 +48,39 @@ export async function GET(request: NextRequest, context: { params: Promise<{ ses
   }
 }
 
-// セッション名の更新
+// セッション情報の更新
 export async function PATCH(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
   try {
     const params = await context.params;
-    const { name } = await request.json();
+    const { name, workingDirectory } = await request.json();
 
-    if (!name) {
+    if (!name && !workingDirectory) {
       return NextResponse.json(
-        { error: 'セッション名が必要です' },
+        { error: 'セッション名または作業ディレクトリが必要です' },
         { status: 400 }
       );
     }
 
+    const updateData: { name?: string; workingDirectory?: string } = {};
+    if (name) updateData.name = name;
+    if (workingDirectory) updateData.workingDirectory = workingDirectory;
+
     const session = await prisma.session.update({
       where: { sessionId: params.sessionId },
-      data: { name }
+      data: updateData
     });
 
     return NextResponse.json({
       sessionId: session.sessionId,
       name: session.name,
-      message: 'セッション名が更新されました'
+      workingDirectory: session.workingDirectory,
+      message: 'セッション情報が更新されました'
     });
 
   } catch (error) {
-    console.error('セッション名更新エラー:', error);
+    console.error('セッション情報更新エラー:', error);
     return NextResponse.json(
-      { error: 'セッション名の更新でエラーが発生しました' },
+      { error: 'セッション情報の更新でエラーが発生しました' },
       { status: 500 }
     );
   }

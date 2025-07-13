@@ -118,6 +118,35 @@ export default function ChatInterface() {
   };
 
   const createNewSession = async (workingDirectory?: string, sessionName?: string) => {
+    // 現在のセッションが空の場合（メッセージがない場合）は新しいセッションを作成せずに現在のセッションを再利用
+    if (messages.length === 0 && sessionId) {
+      // 既存の空のセッションがある場合は、ディレクトリやセッション名だけ更新
+      const finalWorkingDir = workingDirectory || selectedDirectory || process.cwd();
+      const finalSessionName = sessionName || currentSessionName || `新しいセッション ${new Date().toLocaleString('ja-JP')}`;
+      
+      setCurrentWorkingDirectory(finalWorkingDir);
+      setCurrentSessionName(finalSessionName);
+      setShowDirectorySelector(false);
+      
+      // セッション名やディレクトリが変更された場合はデータベースを更新
+      if (workingDirectory || sessionName) {
+        try {
+          await fetch(`/api/sessions/${sessionId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: finalSessionName,
+              workingDirectory: finalWorkingDir
+            })
+          });
+          loadSessions();
+        } catch (error) {
+          console.error('セッション更新エラー:', error);
+        }
+      }
+      return;
+    }
+
     const newSessionId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
     const finalWorkingDir = workingDirectory || selectedDirectory || process.cwd();
     const finalSessionName = sessionName || `新しいセッション ${new Date().toLocaleString('ja-JP')}`;
