@@ -119,13 +119,13 @@ export default function WelcomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex">
+    <div className="h-screen bg-gray-900 text-white flex overflow-hidden">
       {/* 左側：セッション履歴 */}
       <SessionHistory showNewChatButton={false} />
 
       {/* 右側：メインコンテンツ */}
-      <div className="flex-1 flex items-center justify-center">
-        <div className="max-w-2xl w-full p-8">
+      <div className="flex-1 flex items-center justify-center p-8 overflow-hidden">
+        <div className="max-w-2xl w-full">
           <div className="text-center mb-12">
             <h1 className="text-4xl font-bold mb-4">Gemini GUI</h1>
             <p className="text-gray-400">新しいチャットを開始するか、既存のセッションを選択してください</p>
