@@ -152,7 +152,7 @@ export default function SessionHistory({
                     className="bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
                   >
                     {editingSessionId === session.id ? (
-                      <div className="p-3">
+                      <div className="p-2">
                         <input
                           type="text"
                           value={editingSessionName}
@@ -187,7 +187,7 @@ export default function SessionHistory({
                       </div>
                     ) : (
                       <div 
-                        className="p-3 cursor-pointer flex justify-between items-start group"
+                        className="p-2 cursor-pointer flex justify-between items-center group"
                         onClick={() => selectSession(session.id)}
                       >
                         <div className="flex-1 min-w-0">
