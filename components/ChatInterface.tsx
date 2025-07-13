@@ -387,13 +387,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
             </div>
           </div>
           
-          <button
-            onClick={openDirectorySelector}
-            className="bg-blue-600 hover:bg-blue-500 text-white py-1 px-3 rounded-lg transition-colors flex items-center gap-2 text-sm"
-          >
-            <span>📁</span>
-            ディレクトリ選択
-          </button>
         </div>
 
         {/* メッセージエリア */}
