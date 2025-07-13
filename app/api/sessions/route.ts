@@ -7,7 +7,7 @@ import path from 'path';
 export async function GET() {
   try {
     const sessions = await prisma.session.findMany({
-      orderBy: { updatedAt: 'desc' }
+      orderBy: { createdAt: 'desc' }
     });
     
     // ディレクトリ別にグループ化
@@ -27,15 +27,13 @@ export async function GET() {
       });
     });
 
-    // 最新セッション（メッセージがあるセッションの中で最後に更新されたもの）を特定
-    const latestSession = await prisma.session.findFirst({
-      where: {
-        messages: {
-          some: {} // メッセージが存在するセッションのみ
-        }
-      },
-      orderBy: { updatedAt: 'desc' }
+    // 最新セッション（最後にメッセージが送信されたセッション）を特定
+    const latestMessage = await prisma.message.findFirst({
+      orderBy: { timestamp: 'desc' },
+      include: { session: true }
     });
+    
+    const latestSession = latestMessage?.session || null;
     
     return NextResponse.json({ 
       sessionsByDirectory: sessionsByDir,

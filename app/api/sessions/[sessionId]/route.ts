@@ -61,26 +61,9 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
       );
     }
 
-    // 既存のセッション情報を取得
-    const existingSession = await prisma.session.findUnique({
-      where: { sessionId: params.sessionId }
-    });
-
-    if (!existingSession) {
-      return NextResponse.json(
-        { error: 'セッションが見つかりません' },
-        { status: 404 }
-      );
-    }
-
-    const updateData: { name?: string; workingDirectory?: string; updatedAt?: Date } = {};
+    const updateData: { name?: string; workingDirectory?: string } = {};
     if (name) updateData.name = name;
     if (workingDirectory) updateData.workingDirectory = workingDirectory;
-    
-    // セッション名のみの変更の場合、updatedAtを元の値に保持
-    if (name && !workingDirectory) {
-      updateData.updatedAt = existingSession.updatedAt;
-    }
 
     const session = await prisma.session.update({
       where: { sessionId: params.sessionId },
