@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { readdir } from 'fs/promises';
+import { readdir, stat } from 'fs/promises';
 import path from 'path';
 import { getActiveSessionId } from '@/lib/activeSession';
 
@@ -50,12 +50,26 @@ export async function POST(request: NextRequest) {
     const targetPath = basePath || repositoryPath;
 
     const entries = await readdir(targetPath, { withFileTypes: true });
-    const directories = entries
-      .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
-      .map(entry => ({
-        name: entry.name,
-        path: path.join(targetPath, entry.name)
-      }))
+    const directoryEntries = entries
+      .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'));
+
+    // 各ディレクトリの更新時刻を取得
+    const directoriesWithStats = await Promise.all(
+      directoryEntries.map(async (entry) => {
+        const fullPath = path.join(targetPath, entry.name);
+        const stats = await stat(fullPath);
+        return {
+          name: entry.name,
+          path: fullPath,
+          mtime: stats.mtime
+        };
+      })
+    );
+
+    // 更新時刻順（新しい順）でソート
+    const directories = directoriesWithStats
+      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime())
+      .map(({ name, path }) => ({ name, path }))
       .slice(0, 20); // 最大20個まで
 
     return NextResponse.json({
