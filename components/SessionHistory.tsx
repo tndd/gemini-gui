@@ -124,8 +124,8 @@ export default function SessionHistory({
         <h2 className="text-lg font-semibold">セッション履歴</h2>
       </div>
       
-      <div className="p-4 border-b border-gray-700">
-        {showNewChatButton && (
+      {showNewChatButton && (
+        <div className="p-4 border-b border-gray-700">
           <button
             onClick={handleNewChatClick}
             className="w-full bg-gray-600 hover:bg-gray-500 text-white py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
@@ -133,8 +133,8 @@ export default function SessionHistory({
             <span>+</span>
             新しいチャット
           </button>
-        )}
-      </div>
+        </div>
+      )}
       
       <div className="flex-1 overflow-y-auto p-4 thin-scrollbar">
         {Object.keys(groupedSessions).length === 0 ? (
