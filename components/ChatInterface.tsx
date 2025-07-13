@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 
 interface Message {
@@ -23,7 +24,12 @@ interface DirectoryInfo {
   path: string;
 }
 
-export default function ChatInterface() {
+interface ChatInterfaceProps {
+  initialSessionId?: string;
+}
+
+export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) {
+  const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [sessionsByDirectory, setSessionsByDirectory] = useState<{ [directory: string]: SessionUI[] }>({});
   const [inputValue, setInputValue] = useState('');
@@ -33,7 +39,7 @@ export default function ChatInterface() {
   const [selectedDirectory, setSelectedDirectory] = useState<string>('');
   const [availableDirectories, setAvailableDirectories] = useState<DirectoryInfo[]>([]);
   const [sessionId, setSessionId] = useState(() => 
-    crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
+    initialSessionId || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString())
   );
   const [currentWorkingDirectory, setCurrentWorkingDirectory] = useState<string>('');
   const [currentSessionName, setCurrentSessionName] = useState<string>('');
@@ -51,7 +57,19 @@ export default function ChatInterface() {
 
   useEffect(() => {
     loadSessions();
+    // 初期セッションIDが指定されている場合、そのセッションの履歴を読み込む
+    if (initialSessionId) {
+      loadSessionHistory(initialSessionId);
+    }
   }, []);
+
+  useEffect(() => {
+    // initialSessionIdが変更された場合、セッションを切り替える
+    if (initialSessionId && initialSessionId !== sessionId) {
+      setSessionId(initialSessionId);
+      loadSessionHistory(initialSessionId);
+    }
+  }, [initialSessionId]);
 
   const loadSessions = async () => {
     try {
@@ -169,16 +187,17 @@ export default function ChatInterface() {
       setCurrentSessionName(finalSessionName);
       setShowDirectorySelector(false);
       loadSessions();
+      
+      // 新しいセッションページに遷移
+      router.push(`/chat/${newSessionId}`);
     } catch (error) {
       console.error('セッション作成エラー:', error);
     }
   };
 
   const selectSession = (session: SessionUI) => {
-    setSessionId(session.id);
-    setCurrentWorkingDirectory(session.workingDirectory);
-    setCurrentSessionName(session.title);
-    loadSessionHistory(session.id);
+    // ページ遷移でセッションを切り替える
+    router.push(`/chat/${session.id}`);
   };
 
   const openDirectorySelector = () => {
