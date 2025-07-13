@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 
-export interface SessionEntry {
+export interface Session {
   session_id: string;
   name: string;
   working_directory: string;
@@ -9,22 +9,12 @@ export interface SessionEntry {
   updated_at: string;
 }
 
-export interface MessageEntry {
+export interface Message {
   id: number;
   session_id: string;
   user_input: string;
   gemini_response: string;
   timestamp: string;
-}
-
-// 旧インターフェースは互換性のため残す
-export interface ConversationEntry {
-  id: number;
-  timestamp: string;
-  user_input: string;
-  gemini_response: string;
-  session_id: string;
-  working_directory: string;
 }
 
 class DatabaseManager {
@@ -33,11 +23,16 @@ class DatabaseManager {
   init(): void {
     if (this.db) return;
 
-    // データベースファイルをプロジェクトルートに作成
-    const dbPath = path.join(process.cwd(), 'conversations.db');
+    const dbPath = path.join(process.cwd(), 'gemini-gui.db');
     this.db = new Database(dbPath);
 
-    // セッションテーブル作成
+    this.createTables();
+    this.migrateOldData();
+  }
+
+  private createTables(): void {
+    if (!this.db) return;
+
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS sessions (
         session_id TEXT PRIMARY KEY,
@@ -48,7 +43,6 @@ class DatabaseManager {
       )
     `);
 
-    // メッセージテーブル作成
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,69 +53,60 @@ class DatabaseManager {
         FOREIGN KEY (session_id) REFERENCES sessions (session_id) ON DELETE CASCADE
       )
     `);
+  }
 
-    // 旧conversationsテーブルからのマイグレーション
+  private migrateOldData(): void {
+    if (!this.db) return;
+
     try {
-      const hasOldTable = this.db.prepare(`
-        SELECT name FROM sqlite_master 
-        WHERE type='table' AND name='conversations'
-      `).get();
+      // 旧conversations.dbからのマイグレーション
+      const oldDbPath = path.join(process.cwd(), 'conversations.db');
+      try {
+        const oldDb = new Database(oldDbPath, { readonly: true });
+        const hasOldTable = oldDb.prepare(`
+          SELECT name FROM sqlite_master 
+          WHERE type='table' AND name='conversations'
+        `).get();
 
-      if (hasOldTable) {
-        console.log('旧データベースからマイグレーション中...');
-        this.migrateFromOldSchema();
+        if (hasOldTable) {
+          console.log('旧データベースからマイグレーション中...');
+          const oldConversations = oldDb.prepare('SELECT * FROM conversations').all() as any[];
+          
+          const sessionMap = new Map<string, { name: string; workingDirectory: string; conversations: any[] }>();
+          
+          oldConversations.forEach(conv => {
+            if (!sessionMap.has(conv.session_id)) {
+              sessionMap.set(conv.session_id, {
+                name: conv.user_input?.substring(0, 50) + (conv.user_input?.length > 50 ? '...' : '') || 'セッション',
+                workingDirectory: conv.working_directory || process.cwd(),
+                conversations: []
+              });
+            }
+            sessionMap.get(conv.session_id)!.conversations.push(conv);
+          });
+
+          for (const [sessionId, sessionData] of sessionMap) {
+            this.createSession(sessionId, sessionData.name, sessionData.workingDirectory);
+            sessionData.conversations.forEach(conv => {
+              this.addMessage(sessionId, conv.user_input, conv.gemini_response, conv.timestamp);
+            });
+          }
+
+          oldDb.close();
+          console.log('マイグレーション完了');
+        }
+      } catch (error) {
+        // 旧データベースが存在しない場合は無視
       }
     } catch (error) {
       console.error('マイグレーションエラー:', error);
     }
   }
 
-  private migrateFromOldSchema(): void {
-    if (!this.db) return;
-
-    try {
-      const oldConversations = this.db.prepare('SELECT * FROM conversations').all() as any[];
-      
-      // セッションごとにグループ化
-      const sessionMap = new Map<string, { name: string; workingDirectory: string; conversations: any[] }>();
-      
-      oldConversations.forEach(conv => {
-        if (!sessionMap.has(conv.session_id)) {
-          sessionMap.set(conv.session_id, {
-            name: conv.user_input.substring(0, 50) + (conv.user_input.length > 50 ? '...' : ''),
-            workingDirectory: conv.working_directory || process.cwd(),
-            conversations: []
-          });
-        }
-        sessionMap.get(conv.session_id)!.conversations.push(conv);
-      });
-
-      // 新しいスキーマにデータを移行
-      for (const [sessionId, sessionData] of sessionMap) {
-        // セッション作成
-        this.createSession(sessionId, sessionData.name, sessionData.workingDirectory);
-        
-        // メッセージ移行
-        sessionData.conversations.forEach(conv => {
-          this.saveMessage(sessionId, conv.user_input, conv.gemini_response, conv.timestamp);
-        });
-      }
-
-      // 旧テーブルをリネーム（削除ではなく保持）
-      this.db.exec('ALTER TABLE conversations RENAME TO conversations_backup');
-      console.log('マイグレーション完了。旧データはconversations_backupテーブルに保存されました。');
-      
-    } catch (error) {
-      console.error('マイグレーション中のエラー:', error);
-    }
-  }
-
   createSession(sessionId: string, name: string, workingDirectory: string): void {
-    if (!this.db) {
-      throw new Error('データベースが初期化されていません');
-    }
-
-    const stmt = this.db.prepare(`
+    this.ensureDbInitialized();
+    
+    const stmt = this.db!.prepare(`
       INSERT OR REPLACE INTO sessions (session_id, name, working_directory, created_at, updated_at)
       VALUES (?, ?, ?, datetime('now'), datetime('now'))
     `);
@@ -130,11 +115,9 @@ class DatabaseManager {
   }
 
   updateSessionName(sessionId: string, name: string): void {
-    if (!this.db) {
-      throw new Error('データベースが初期化されていません');
-    }
-
-    const stmt = this.db.prepare(`
+    this.ensureDbInitialized();
+    
+    const stmt = this.db!.prepare(`
       UPDATE sessions 
       SET name = ?, updated_at = datetime('now')
       WHERE session_id = ?
@@ -143,26 +126,31 @@ class DatabaseManager {
     stmt.run(name, sessionId);
   }
 
-  saveMessage(sessionId: string, userInput: string, geminiResponse: string, timestamp?: string): void {
-    if (!this.db) {
-      throw new Error('データベースが初期化されていません');
-    }
-
-    const stmt = this.db.prepare(`
+  addMessage(sessionId: string, userInput: string, geminiResponse: string, timestamp?: string): void {
+    this.ensureDbInitialized();
+    
+    const stmt = this.db!.prepare(`
       INSERT INTO messages (session_id, user_input, gemini_response, timestamp)
       VALUES (?, ?, ?, ?)
     `);
     
     stmt.run(sessionId, userInput, geminiResponse, timestamp || new Date().toISOString());
-
-    // セッションの更新時刻も更新
     this.updateSessionTimestamp(sessionId);
   }
 
-  private updateSessionTimestamp(sessionId: string): void {
-    if (!this.db) return;
+  saveConversation(userInput: string, geminiResponse: string, sessionId: string, workingDirectory: string): void {
+    const session = this.getSession(sessionId);
+    if (!session) {
+      const sessionName = userInput.substring(0, 50) + (userInput.length > 50 ? '...' : '');
+      this.createSession(sessionId, sessionName, workingDirectory);
+    }
+    this.addMessage(sessionId, userInput, geminiResponse);
+  }
 
-    const stmt = this.db.prepare(`
+  private updateSessionTimestamp(sessionId: string): void {
+    this.ensureDbInitialized();
+    
+    const stmt = this.db!.prepare(`
       UPDATE sessions 
       SET updated_at = datetime('now')
       WHERE session_id = ?
@@ -171,66 +159,41 @@ class DatabaseManager {
     stmt.run(sessionId);
   }
 
-  // 互換性のための旧メソッド
-  saveConversation(
-    userInput: string, 
-    geminiResponse: string, 
-    sessionId: string,
-    workingDirectory: string
-  ): void {
-    // セッションが存在しない場合は作成
-    const session = this.getSession(sessionId);
-    if (!session) {
-      const sessionName = userInput.substring(0, 50) + (userInput.length > 50 ? '...' : '');
-      this.createSession(sessionId, sessionName, workingDirectory);
-    }
-
-    this.saveMessage(sessionId, userInput, geminiResponse);
-  }
-
-  // 新しいスキーマ用メソッド
-  getSession(sessionId: string): SessionEntry | null {
+  private ensureDbInitialized(): void {
     if (!this.db) {
       throw new Error('データベースが初期化されていません');
     }
+  }
 
-    const stmt = this.db.prepare(`
-      SELECT * FROM sessions WHERE session_id = ?
-    `);
+  getSession(sessionId: string): Session | null {
+    this.ensureDbInitialized();
     
-    return stmt.get(sessionId) as SessionEntry | null;
+    const stmt = this.db!.prepare('SELECT * FROM sessions WHERE session_id = ?');
+    return stmt.get(sessionId) as Session | null;
   }
 
-  getAllSessions(): SessionEntry[] {
-    if (!this.db) {
-      throw new Error('データベースが初期化されていません');
-    }
-
-    const stmt = this.db.prepare('SELECT * FROM sessions ORDER BY updated_at DESC');
-    return stmt.all() as SessionEntry[];
+  getAllSessions(): Session[] {
+    this.ensureDbInitialized();
+    
+    const stmt = this.db!.prepare('SELECT * FROM sessions ORDER BY updated_at DESC');
+    return stmt.all() as Session[];
   }
 
-  getSessionMessages(sessionId: string): MessageEntry[] {
-    if (!this.db) {
-      throw new Error('データベースが初期化されていません');
-    }
-
-    const stmt = this.db.prepare(`
+  getSessionMessages(sessionId: string): Message[] {
+    this.ensureDbInitialized();
+    
+    const stmt = this.db!.prepare(`
       SELECT * FROM messages 
       WHERE session_id = ? 
       ORDER BY timestamp ASC
     `);
     
-    return stmt.all(sessionId) as MessageEntry[];
+    return stmt.all(sessionId) as Message[];
   }
 
-  getSessionsByWorkingDirectory(): { [directory: string]: SessionEntry[] } {
-    if (!this.db) {
-      throw new Error('データベースが初期化されていません');
-    }
-
+  getSessionsByWorkingDirectory(): { [directory: string]: Session[] } {
     const sessions = this.getAllSessions();
-    const sessionsByDir: { [directory: string]: SessionEntry[] } = {};
+    const sessionsByDir: { [directory: string]: Session[] } = {};
     
     sessions.forEach(session => {
       const dir = session.working_directory;
@@ -243,8 +206,13 @@ class DatabaseManager {
     return sessionsByDir;
   }
 
-  // 互換性のための旧メソッド（新しいスキーマに対応）
-  getConversationHistory(sessionId: string): ConversationEntry[] {
+  getSessionWorkingDirectory(sessionId: string): string | null {
+    const session = this.getSession(sessionId);
+    return session?.working_directory || null;
+  }
+
+  // 後方互換性用（旧API Routes用）
+  getConversationHistory(sessionId: string): any[] {
     const session = this.getSession(sessionId);
     const messages = this.getSessionMessages(sessionId);
 
@@ -260,31 +228,17 @@ class DatabaseManager {
     }));
   }
 
-  getAllConversations(): ConversationEntry[] {
-    if (!this.db) {
-      throw new Error('データベースが初期化されていません');
-    }
-
-    const stmt = this.db.prepare(`
+  getAllConversations(): any[] {
+    this.ensureDbInitialized();
+    
+    const stmt = this.db!.prepare(`
       SELECT m.*, s.working_directory 
       FROM messages m
       JOIN sessions s ON m.session_id = s.session_id
       ORDER BY m.timestamp DESC
     `);
     
-    return stmt.all().map((row: any) => ({
-      id: row.id,
-      timestamp: row.timestamp,
-      user_input: row.user_input,
-      gemini_response: row.gemini_response,
-      session_id: row.session_id,
-      working_directory: row.working_directory
-    }));
-  }
-
-  getSessionWorkingDirectory(sessionId: string): string | null {
-    const session = this.getSession(sessionId);
-    return session?.working_directory || null;
+    return stmt.all();
   }
 }
 

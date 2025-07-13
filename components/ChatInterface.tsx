@@ -10,12 +10,12 @@ interface Message {
   timestamp: string;
 }
 
-interface Session {
+interface SessionUI {
   id: string;
   title: string;
-  lastMessage: string;
   timestamp: string;
-  workingDirectory?: string;
+  workingDirectory: string;
+  createdAt: string;
 }
 
 interface DirectoryInfo {
@@ -25,7 +25,7 @@ interface DirectoryInfo {
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [sessionsByDirectory, setSessionsByDirectory] = useState<{ [directory: string]: Session[] }>({});
+  const [sessionsByDirectory, setSessionsByDirectory] = useState<{ [directory: string]: SessionUI[] }>({});
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -145,9 +145,9 @@ export default function ChatInterface() {
     }
   };
 
-  const selectSession = (session: Session) => {
+  const selectSession = (session: SessionUI) => {
     setSessionId(session.id);
-    setCurrentWorkingDirectory(session.workingDirectory || '');
+    setCurrentWorkingDirectory(session.workingDirectory);
     setCurrentSessionName(session.title);
     loadSessionHistory(session.id);
   };
@@ -157,7 +157,7 @@ export default function ChatInterface() {
     loadDirectories();
   };
 
-  const startEditingSession = (session: Session) => {
+  const startEditingSession = (session: SessionUI) => {
     setEditingSessionId(session.id);
     setEditingSessionName(session.title);
   };
@@ -205,7 +205,7 @@ export default function ChatInterface() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/gemini', {
+      const response = await fetch('/api/messages', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -232,7 +232,7 @@ export default function ChatInterface() {
 
       setMessages(prev => [...prev, assistantMessage]);
       
-      // セッションの最初のメッセージの場合、セッション名を更新
+      // セッションの最初のメッセージの場合、セッション名を自動更新
       if (messages.length === 0) {
         const newSessionName = currentInput.substring(0, 50) + (currentInput.length > 50 ? '...' : '');
         try {
@@ -470,14 +470,19 @@ export default function ChatInterface() {
                     <div className="prose prose-invert prose-sm max-w-none">
                       <ReactMarkdown 
                         components={{
-                          code: ({node, inline, className, children, ...props}) => {
-                            return inline ? (
-                              <code className="bg-gray-800 text-green-400 px-1 py-0.5 rounded text-sm" {...props}>
+                          code: (props) => {
+                            const { children, className } = props;
+                            return (
+                              <code className="bg-gray-800 text-green-400 px-1 py-0.5 rounded text-sm">
                                 {children}
                               </code>
-                            ) : (
+                            );
+                          },
+                          pre: (props) => {
+                            const { children } = props;
+                            return (
                               <pre className="bg-gray-800 text-green-400 p-3 rounded overflow-x-auto">
-                                <code {...props}>{children}</code>
+                                {children}
                               </pre>
                             );
                           }

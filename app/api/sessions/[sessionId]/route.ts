@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbManager from '@/lib/database';
 
 // セッション情報の取得
-export async function GET(request: NextRequest, { params }: { params: { sessionId: string } }) {
+export async function GET(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
   try {
+    const params = await context.params;
     dbManager.init();
     
     const session = dbManager.getSession(params.sessionId);
@@ -31,8 +32,9 @@ export async function GET(request: NextRequest, { params }: { params: { sessionI
 }
 
 // セッション名の更新
-export async function PATCH(request: NextRequest, { params }: { params: { sessionId: string } }) {
+export async function PATCH(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
   try {
+    const params = await context.params;
     const { name } = await request.json();
 
     if (!name) {
