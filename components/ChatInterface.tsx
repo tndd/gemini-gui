@@ -231,7 +231,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
     setIsLoading(true);
 
     try {
-      const response = await fetch('/api/messages', {
+      const response = await fetch('/api/terminal', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
