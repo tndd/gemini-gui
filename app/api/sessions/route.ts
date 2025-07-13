@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { readdir } from 'fs/promises';
 import path from 'path';
+import { getActiveSessionId } from '@/lib/activeSession';
 
 // セッション情報の取得（ディレクトリ別グループ化）
 export async function GET() {
@@ -27,17 +28,9 @@ export async function GET() {
       });
     });
 
-    // 最新セッション（最後にメッセージが送信されたセッション）を特定
-    const latestMessage = await prisma.message.findFirst({
-      orderBy: { timestamp: 'desc' },
-      include: { session: true }
-    });
-    
-    const latestSession = latestMessage?.session || null;
-    
     return NextResponse.json({ 
       sessionsByDirectory: sessionsByDir,
-      latestSessionId: latestSession?.sessionId || null
+      latestSessionId: getActiveSessionId()
     });
 
   } catch (error) {
