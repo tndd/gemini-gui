@@ -22,7 +22,7 @@ interface SessionHistoryProps {
 
 export default function SessionHistory({
   showNewChatButton = true,
-  className = "w-80 bg-gray-800 border-r border-gray-700 flex flex-col"
+  className = "w-1/4 bg-gray-800 border-r border-gray-700 flex flex-col"
 }: SessionHistoryProps) {
   const [groupedSessions, setGroupedSessions] = useState<GroupedSessions>({});
   const [editingSessionId, setEditingSessionId] = useState<string>('');
