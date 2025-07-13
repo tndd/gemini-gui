@@ -4,7 +4,7 @@ import { readdir } from 'fs/promises';
 import path from 'path';
 
 // セッション情報の取得（ディレクトリ別グループ化）
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     dbManager.init();
 
@@ -13,24 +13,14 @@ export async function GET(request: NextRequest) {
     // セッション情報を整理
     const formattedSessions: { [directory: string]: any[] } = {};
     
-    for (const [directory, conversations] of Object.entries(sessionsByDir)) {
-      const sessionMap = new Map();
-      
-      conversations.forEach(conv => {
-        if (!sessionMap.has(conv.session_id)) {
-          sessionMap.set(conv.session_id, {
-            id: conv.session_id,
-            title: conv.user_input.substring(0, 30) + (conv.user_input.length > 30 ? '...' : ''),
-            lastMessage: conv.user_input,
-            timestamp: conv.timestamp,
-            workingDirectory: conv.working_directory
-          });
-        }
-      });
-      
-      formattedSessions[directory] = Array.from(sessionMap.values()).sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      );
+    for (const [directory, sessions] of Object.entries(sessionsByDir)) {
+      formattedSessions[directory] = sessions.map(session => ({
+        id: session.session_id,
+        title: session.name,
+        timestamp: session.updated_at,
+        workingDirectory: session.working_directory,
+        createdAt: session.created_at
+      }));
     }
 
     return NextResponse.json({ sessionsByDirectory: formattedSessions });

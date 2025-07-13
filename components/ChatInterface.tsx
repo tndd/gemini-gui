@@ -36,6 +36,9 @@ export default function ChatInterface() {
     crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
   );
   const [currentWorkingDirectory, setCurrentWorkingDirectory] = useState<string>('');
+  const [currentSessionName, setCurrentSessionName] = useState<string>('');
+  const [editingSessionId, setEditingSessionId] = useState<string>('');
+  const [editingSessionName, setEditingSessionName] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -85,23 +88,26 @@ export default function ChatInterface() {
 
   const loadSessionHistory = async (sessionId: string) => {
     try {
-      const response = await fetch(`/api/gemini?sessionId=${sessionId}`);
+      const response = await fetch(`/api/sessions/${sessionId}`);
       const data = await response.json();
       
-      if (data.history) {
+      if (data.session && data.messages) {
+        setCurrentSessionName(data.session.name);
+        setCurrentWorkingDirectory(data.session.working_directory);
+        
         const loadedMessages: Message[] = [];
-        data.history.forEach((conv: any) => {
+        data.messages.forEach((msg: any) => {
           loadedMessages.push({
-            id: `${conv.id}-user`,
-            content: conv.user_input,
+            id: `${msg.id}-user`,
+            content: msg.user_input,
             sender: 'user',
-            timestamp: conv.timestamp
+            timestamp: msg.timestamp
           });
           loadedMessages.push({
-            id: `${conv.id}-assistant`,
-            content: conv.gemini_response,
+            id: `${msg.id}-assistant`,
+            content: msg.gemini_response,
             sender: 'assistant',
-            timestamp: conv.timestamp
+            timestamp: msg.timestamp
           });
         });
         setMessages(loadedMessages);
@@ -111,24 +117,76 @@ export default function ChatInterface() {
     }
   };
 
-  const createNewSession = (workingDirectory?: string) => {
+  const createNewSession = async (workingDirectory?: string, sessionName?: string) => {
     const newSessionId = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
-    setSessionId(newSessionId);
-    setMessages([]);
-    setCurrentWorkingDirectory(workingDirectory || selectedDirectory || '');
-    setShowDirectorySelector(false);
-    loadSessions();
+    const finalWorkingDir = workingDirectory || selectedDirectory || process.cwd();
+    const finalSessionName = sessionName || `新しいセッション ${new Date().toLocaleString('ja-JP')}`;
+    
+    try {
+      // セッションをデータベースに作成
+      await fetch('/api/sessions/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: newSessionId,
+          name: finalSessionName,
+          workingDirectory: finalWorkingDir
+        })
+      });
+
+      setSessionId(newSessionId);
+      setMessages([]);
+      setCurrentWorkingDirectory(finalWorkingDir);
+      setCurrentSessionName(finalSessionName);
+      setShowDirectorySelector(false);
+      loadSessions();
+    } catch (error) {
+      console.error('セッション作成エラー:', error);
+    }
   };
 
   const selectSession = (session: Session) => {
     setSessionId(session.id);
     setCurrentWorkingDirectory(session.workingDirectory || '');
+    setCurrentSessionName(session.title);
     loadSessionHistory(session.id);
   };
 
   const openDirectorySelector = () => {
     setShowDirectorySelector(true);
     loadDirectories();
+  };
+
+  const startEditingSession = (session: Session) => {
+    setEditingSessionId(session.id);
+    setEditingSessionName(session.title);
+  };
+
+  const saveSessionName = async () => {
+    if (!editingSessionName.trim()) return;
+
+    try {
+      await fetch(`/api/sessions/${editingSessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editingSessionName })
+      });
+
+      if (editingSessionId === sessionId) {
+        setCurrentSessionName(editingSessionName);
+      }
+
+      setEditingSessionId('');
+      setEditingSessionName('');
+      loadSessions();
+    } catch (error) {
+      console.error('セッション名更新エラー:', error);
+    }
+  };
+
+  const cancelEditingSession = () => {
+    setEditingSessionId('');
+    setEditingSessionName('');
   };
 
   const sendMessage = async () => {
@@ -173,6 +231,22 @@ export default function ChatInterface() {
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      
+      // セッションの最初のメッセージの場合、セッション名を更新
+      if (messages.length === 0) {
+        const newSessionName = currentInput.substring(0, 50) + (currentInput.length > 50 ? '...' : '');
+        try {
+          await fetch(`/api/sessions/${sessionId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newSessionName })
+          });
+          setCurrentSessionName(newSessionName);
+        } catch (error) {
+          console.error('セッション名更新エラー:', error);
+        }
+      }
+      
       loadSessions(); // セッション一覧を更新
 
     } catch (error) {
@@ -229,17 +303,59 @@ export default function ChatInterface() {
               {sessions.map((session) => (
                 <div
                   key={session.id}
-                  onClick={() => selectSession(session)}
-                  className={`p-3 rounded-lg cursor-pointer mb-2 ml-2 transition-colors ${
+                  className={`p-3 rounded-lg mb-2 ml-2 transition-colors group ${
                     session.id === sessionId 
                       ? 'bg-gray-700' 
                       : 'hover:bg-gray-800'
                   }`}
                 >
-                  <div className="text-sm font-medium truncate">{session.title}</div>
-                  <div className="text-xs text-gray-400 mt-1">
-                    {new Date(session.timestamp).toLocaleDateString('ja-JP')}
-                  </div>
+                  {editingSessionId === session.id ? (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={editingSessionName}
+                        onChange={(e) => setEditingSessionName(e.target.value)}
+                        className="w-full bg-gray-600 text-white px-2 py-1 rounded text-sm"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter') saveSessionName();
+                          if (e.key === 'Escape') cancelEditingSession();
+                        }}
+                        autoFocus
+                      />
+                      <div className="flex gap-1">
+                        <button
+                          onClick={saveSessionName}
+                          className="text-xs bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded"
+                        >
+                          保存
+                        </button>
+                        <button
+                          onClick={cancelEditingSession}
+                          className="text-xs bg-gray-600 hover:bg-gray-500 px-2 py-1 rounded"
+                        >
+                          キャンセル
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div onClick={() => selectSession(session)} className="cursor-pointer">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium truncate flex-1">{session.title}</div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEditingSession(session);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-white ml-2 text-xs"
+                        >
+                          ✏️
+                        </button>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {new Date(session.timestamp).toLocaleDateString('ja-JP')}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -306,7 +422,9 @@ export default function ChatInterface() {
               <span className="text-lg">☰</span>
             </button>
             <div>
-              <h1 className="text-lg font-semibold text-white">Gemini GUI</h1>
+              <h1 className="text-lg font-semibold text-white">
+                {currentSessionName || 'Gemini GUI'}
+              </h1>
               <p className="text-sm text-gray-400">
                 {currentWorkingDirectory ? 
                   `📁 ${currentWorkingDirectory.split('/').pop() || currentWorkingDirectory}` : 
