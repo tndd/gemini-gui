@@ -88,23 +88,12 @@ export default function WelcomePage() {
           sessionId: newSessionId,
           name: sessionName,
           workingDirectory: selectedDirectory,
-          // 事前初期化は不要
         })
       });
 
-      // メッセージを送信
-      await fetch('/api/terminal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: newSessionId,
-          message: chatInput.trim(),
-          workingDirectory: selectedDirectory
-        })
-      });
-
-      // チャットページに遷移
-      router.push(`/chat/${newSessionId}`);
+      // メッセージをクエリパラメータとして渡してチャットページに即座に遷移
+      const encodedMessage = encodeURIComponent(chatInput.trim());
+      router.push(`/chat/${newSessionId}?message=${encodedMessage}`);
     } catch (error) {
       console.error('チャット開始エラー:', error);
       setIsLoading(false);

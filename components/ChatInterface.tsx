@@ -14,9 +14,10 @@ interface Message {
 
 interface ChatInterfaceProps {
   initialSessionId?: string;
+  initialMessage?: string | null;
 }
 
-export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) {
+export default function ChatInterface({ initialSessionId, initialMessage }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -51,6 +52,20 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
       loadSessionHistory(initialSessionId);
     }
   }, [initialSessionId]);
+
+  // 初期メッセージがある場合の処理
+  useEffect(() => {
+    if (initialMessage && initialSessionId && !isLoading) {
+      // 初期メッセージを自動送信
+      setInputValue(initialMessage);
+      // 少し遅延させてから送信（セッション情報が読み込まれるのを待つ）
+      const timer = setTimeout(() => {
+        sendInitialMessage(initialMessage);
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [initialMessage, initialSessionId]);
 
   const loadLatestSessionId = async () => {
     try {
@@ -100,6 +115,65 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
       }
     } catch (error) {
       console.error('履歴読み込みエラー:', error);
+    }
+  };
+
+  const sendInitialMessage = async (message: string) => {
+    if (!message.trim() || isLoading) return;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: message,
+      sender: 'user',
+      timestamp: new Date().toISOString()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputValue('');
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/terminal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: message,
+          sessionId: sessionId,
+          workingDirectory: currentWorkingDirectory
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: data.response,
+        sender: 'assistant',
+        timestamp: data.timestamp
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+      
+      // サーバーのアクティブセッション情報を更新
+      loadLatestSessionId();
+
+    } catch (error) {
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: `エラー: ${error instanceof Error ? error.message : '不明なエラーが発生しました'}`,
+        sender: 'assistant',
+        timestamp: new Date().toISOString()
+      };
+
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
