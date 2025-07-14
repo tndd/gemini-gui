@@ -30,7 +30,7 @@ export const useActiveSession = (
         setIsActive(true);
         
         // URLを更新（オプション）
-        if (window.location.pathname === '/') {
+        if (typeof window !== 'undefined' && window.location.pathname === '/') {
           router.push(`/chat/${sessionId}`);
         }
       }
@@ -74,11 +74,19 @@ export const useActiveSession = (
   // 初期化
   useEffect(() => {
     if (options.autoActivateOnMount) {
-      activateSession();
+      // まずアクティブ状態をチェックし、非アクティブな場合のみアクティブ化
+      checkActiveStatus().then(() => {
+        // 少し待ってから再度チェック（状態の同期待ち）
+        setTimeout(() => {
+          if (!isActive) {
+            activateSession();
+          }
+        }, 100);
+      });
     } else {
       checkActiveStatus();
     }
-  }, [sessionId, activateSession, checkActiveStatus, options.autoActivateOnMount]);
+  }, [sessionId]);
 
   // クリーンアップ
   useEffect(() => {

@@ -16,6 +16,8 @@ model Session {
   workingDirectory String    @map("working_directory")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
+  isActive        Boolean   @default(false) @map("is_active")
+  lastAccessed    DateTime  @default(now()) @map("last_accessed")
   messages        Message[]
 
   @@map("sessions")

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn, ChildProcess } from 'child_process';
 import { prisma } from '@/lib/prisma';
-import { setActiveSessionId } from '@/lib/activeSession';
+import SessionManager from '@/lib/sessionManager';
 
 // セッションIDとGemini CLIプロセスのマッピング（将来の機能拡張用）
 // const sessionProcesses = new Map<string, ChildProcess>();
@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
     const finalWorkingDir = session?.workingDirectory || workingDirectory || process.cwd();
 
     // メッセージ送信でこのセッションをアクティブに設定
-    setActiveSessionId(sessionId);
+    const sessionManager = SessionManager.getInstance();
+    await sessionManager.setActiveSession(sessionId);
 
     // セッションのコンテキスト取得（過去のメッセージ）
     const previousMessages = await prisma.message.findMany({

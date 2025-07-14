@@ -80,6 +80,14 @@ class SessionManager {
 
       if (activeSession) {
         this.activeSession = activeSession.sessionId;
+        
+        // メモリ内の状態も更新
+        this.sessionStates.set(activeSession.sessionId, {
+          sessionId: activeSession.sessionId,
+          isActive: true,
+          lastAccessed: activeSession.lastAccessed,
+        });
+        
         return activeSession.sessionId;
       }
     } catch (error) {

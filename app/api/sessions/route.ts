@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { readdir, stat } from 'fs/promises';
 import path from 'path';
-import { getActiveSessionId } from '@/lib/activeSession';
+import SessionManager from '@/lib/sessionManager';
 
 // セッション情報の取得（ディレクトリ別グループ化）
 export async function GET() {
@@ -28,9 +28,12 @@ export async function GET() {
       });
     });
 
+    const sessionManager = SessionManager.getInstance();
+    const activeSessionId = sessionManager.getActiveSession() || await sessionManager.restoreActiveSession();
+    
     return NextResponse.json({ 
       sessionsByDirectory: sessionsByDir,
-      latestSessionId: getActiveSessionId()
+      latestSessionId: activeSessionId
     });
 
   } catch (error) {

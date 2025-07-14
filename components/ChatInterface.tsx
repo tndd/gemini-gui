@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import SessionHistory from './SessionHistory';
+import { useActiveSession } from '@/hooks/useActiveSession';
 
 interface Message {
   id: string;
@@ -26,12 +27,13 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   );
   const [currentWorkingDirectory, setCurrentWorkingDirectory] = useState<string>('');
   const [currentSessionName, setCurrentSessionName] = useState<string>('');
-  const [latestSessionId, setLatestSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 現在のセッションが最新（アクティブ）かどうかを判定
-  // latestSessionIdがnullの場合は、現在のセッションをアクティブとして扱う
-  const isActiveSession = latestSessionId === null || sessionId === latestSessionId;
+  // 新しいセッション管理システムを使用
+  const { isActive: isActiveSession, activateSession, touchSession } = useActiveSession(
+    sessionId,
+    { autoActivateOnMount: true } // 常に自動アクティブ化
+  );
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -42,33 +44,23 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   }, [messages]);
 
   useEffect(() => {
-    // 常にサーバーから最新セッションIDを取得
-    loadLatestSessionId();
-    
     // 初期セッションIDが指定されている場合、そのセッションの履歴を読み込む
     if (initialSessionId) {
       setSessionId(initialSessionId);
       loadSessionHistory(initialSessionId);
+      // セッションをアクティブにする（非同期で実行）
+      activateSession();
     }
   }, [initialSessionId]);
-
-  const loadLatestSessionId = async () => {
-    try {
-      const response = await fetch('/api/sessions');
-      const data = await response.json();
-      setLatestSessionId(data.latestSessionId);
-    } catch (error) {
-      console.error('最新セッションID取得エラー:', error);
-    }
-  };
 
   useEffect(() => {
     // initialSessionIdが変更された場合、セッションを切り替える
     if (initialSessionId && initialSessionId !== sessionId) {
       setSessionId(initialSessionId);
       loadSessionHistory(initialSessionId);
+      activateSession(); // セッションをアクティブにする
     }
-  }, [initialSessionId]);
+  }, [initialSessionId, sessionId]);
 
 
 
@@ -110,7 +102,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
 
 
   const sendMessage = async () => {
-    if (!inputValue.trim() || isLoading) return;
+    if (!inputValue.trim() || isLoading || !isActiveSession) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -125,6 +117,9 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
     setIsLoading(true);
 
     try {
+      // セッションのアクセス時刻を更新
+      await touchSession();
+      
       const response = await fetch('/api/terminal', {
         method: 'POST',
         headers: {
@@ -152,11 +147,10 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
 
       setMessages(prev => [...prev, assistantMessage]);
       
-      // 最新セッションIDを更新（このセッションが最新になる）
-      setLatestSessionId(sessionId);
-      
-      // サーバーのアクティブセッション情報も更新
-      loadLatestSessionId();
+      // セッションがアクティブでない場合は、アクティブにする
+      if (!isActiveSession) {
+        await activateSession();
+      }
       
       // セッションの最初のメッセージの場合、セッション名を自動更新
       if (messages.length === 0) {

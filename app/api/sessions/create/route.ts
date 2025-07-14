@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { setActiveSessionId } from '@/lib/activeSession';
+import SessionManager from '@/lib/sessionManager';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +22,8 @@ export async function POST(request: NextRequest) {
     });
 
     // 新しいセッションをアクティブに設定
-    setActiveSessionId(sessionId);
+    const sessionManager = SessionManager.getInstance();
+    await sessionManager.setActiveSession(sessionId);
 
     return NextResponse.json({
       sessionId: session.sessionId,
