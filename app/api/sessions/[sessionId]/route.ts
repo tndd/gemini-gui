@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 // セッション情報の取得
 export async function GET(request: NextRequest, context: { params: { sessionId: string } }) {
   try {
-    const { sessionId } = context.params;
+    const { sessionId } = await context.params;
     
     const session = await prisma.session.findUnique({
       where: { sessionId },
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, context: { params: { sessionId: 
 // セッション情報の更新
 export async function PATCH(request: NextRequest, context: { params: { sessionId: string } }) {
   try {
-    const { sessionId } = context.params;
+    const { sessionId } = await context.params;
     const { name, workingDirectory } = await request.json();
 
     if (!name && !workingDirectory) {
@@ -66,7 +66,7 @@ export async function PATCH(request: NextRequest, context: { params: { sessionId
     if (workingDirectory) updateData.workingDirectory = workingDirectory;
 
     const session = await prisma.session.update({
-      where: { sessionId: params.sessionId },
+      where: { sessionId },
       data: updateData
     });
 
@@ -89,7 +89,7 @@ export async function PATCH(request: NextRequest, context: { params: { sessionId
 // セッションの削除
 export async function DELETE(request: NextRequest, context: { params: { sessionId: string } }) {
   try {
-    const { sessionId } = context.params;
+    const { sessionId } = await context.params;
     
     // セッションが存在するかチェック
     const existingSession = await prisma.session.findUnique({
@@ -105,12 +105,12 @@ export async function DELETE(request: NextRequest, context: { params: { sessionI
 
     // セッションを削除（関連するメッセージも自動削除される：Prismaのcascade設定）
     await prisma.session.delete({
-      where: { sessionId: params.sessionId }
+      where: { sessionId }
     });
 
     return NextResponse.json({
       message: 'セッションが削除されました',
-      sessionId: params.sessionId
+      sessionId
     });
 
   } catch (error) {
