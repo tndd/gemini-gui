@@ -92,7 +92,7 @@ export default function WelcomePage() {
         })
       });
 
-      // メッセージを送信
+      // メッセージを送信（同期処理）
       await fetch('/api/terminal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,8 +103,8 @@ export default function WelcomePage() {
         })
       });
 
-      // チャットページに遷移
-      router.push(`/chat/${newSessionId}`);
+      // 応答完了後にチャットページに遷移（新しいセッションフラグ付き）
+      router.push(`/chat/${newSessionId}?new=true`);
     } catch (error) {
       console.error('チャット開始エラー:', error);
       setIsLoading(false);

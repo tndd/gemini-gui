@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import SessionHistory from './SessionHistory';
 
@@ -17,6 +18,7 @@ interface ChatInterfaceProps {
 }
 
 export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) {
+  const searchParams = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -26,12 +28,11 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   );
   const [currentWorkingDirectory, setCurrentWorkingDirectory] = useState<string>('');
   const [currentSessionName, setCurrentSessionName] = useState<string>('');
-  const [latestSessionId, setLatestSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 現在のセッションが最新（アクティブ）かどうかを判定
-  // latestSessionIdがnullの場合は、アクティブセッションが存在しない状態とする
-  const isActiveSession = latestSessionId !== null && sessionId === latestSessionId;
+  // 送信可能かどうかの判定：WelcomePageから作成されたセッションのみ送信可能
+  // 既存セッション（履歴から開いたもの）は送信不可
+  const canSendMessage = searchParams.get('new') === 'true'; // new=trueの場合は新セッション
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -42,9 +43,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   }, [messages]);
 
   useEffect(() => {
-    // 常にサーバーから最新セッションIDを取得
-    loadLatestSessionId();
-    
     // 初期セッションIDが指定されている場合、そのセッションの履歴を読み込む
     if (initialSessionId) {
       setSessionId(initialSessionId);
@@ -52,15 +50,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
     }
   }, [initialSessionId]);
 
-  const loadLatestSessionId = async () => {
-    try {
-      const response = await fetch('/api/sessions');
-      const data = await response.json();
-      setLatestSessionId(data.latestSessionId);
-    } catch (error) {
-      console.error('最新セッションID取得エラー:', error);
-    }
-  };
 
   useEffect(() => {
     // initialSessionIdが変更された場合、セッションを切り替える
@@ -102,6 +91,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
       console.error('履歴読み込みエラー:', error);
     }
   };
+
 
 
 
@@ -151,9 +141,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-      
-      // サーバーのアクティブセッション情報を更新
-      loadLatestSessionId();
       
       // セッションの最初のメッセージの場合、セッション名を自動更新
       if (messages.length === 0) {
@@ -322,7 +309,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
         {/* 入力エリア */}
         <div className="bg-gray-900 border-t border-gray-700 p-4">
           <div className="max-w-4xl mx-auto">
-            {!isActiveSession && (
+            {!canSendMessage && (
               <div className="mb-4 p-3 bg-yellow-900/20 border border-yellow-600/30 rounded-lg">
                 <p className="text-yellow-300 text-sm flex items-center gap-2">
                   <span>📚</span>
@@ -336,20 +323,20 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder={isActiveSession ? "メッセージを入力してください (Ctrl+Enter で送信)" : "過去のセッションでは入力できません"}
+                placeholder={canSendMessage ? "メッセージを入力してください (Ctrl+Enter で送信)" : "過去のセッションでは入力できません"}
                 className={`flex-1 border rounded-lg p-3 resize-none focus:outline-none text-white placeholder-gray-400 ${
-                  isActiveSession 
+                  canSendMessage 
                     ? "bg-gray-700 border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                     : "bg-gray-800 border-gray-500 cursor-not-allowed"
                 }`}
                 rows={3}
-                disabled={isLoading || !isActiveSession}
+                disabled={isLoading || !canSendMessage}
               />
               <button
                 onClick={sendMessage}
-                disabled={!inputValue.trim() || isLoading || !isActiveSession}
+                disabled={!inputValue.trim() || isLoading || !canSendMessage}
                 className={`text-white px-6 py-3 rounded-lg transition-colors ${
-                  isActiveSession && !isLoading && inputValue.trim()
+                  canSendMessage && !isLoading && inputValue.trim()
                     ? "bg-blue-600 hover:bg-blue-500"
                     : "bg-gray-600 cursor-not-allowed"
                 }`}

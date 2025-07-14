@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { setActiveSessionId } from '@/lib/activeSession';
 import { createModuleLogger } from '@/lib/logger';
 
 const logger = createModuleLogger('sessions-create');
@@ -27,8 +26,6 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // 新しいセッションをアクティブに設定
-    setActiveSessionId(sessionId);
     logger.info('セッション作成完了', { sessionId });
 
     return NextResponse.json({
