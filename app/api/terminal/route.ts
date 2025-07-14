@@ -3,8 +3,8 @@ import { spawn, ChildProcess } from 'child_process';
 import { prisma } from '@/lib/prisma';
 import { setActiveSessionId } from '@/lib/activeSession';
 
-// セッションIDとGemini CLIプロセスのマッピング
-const sessionProcesses = new Map<string, ChildProcess>();
+// セッションIDとGemini CLIプロセスのマッピング（将来の機能拡張用）
+// const sessionProcesses = new Map<string, ChildProcess>();
 
 export async function POST(request: NextRequest) {
   try {
@@ -101,127 +101,109 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function getOrCreateGeminiProcess(sessionId: string, workingDirectory?: string): ChildProcess {
-  // 既存プロセスがあればそれを返す
-  if (sessionProcesses.has(sessionId)) {
-    const existingProcess = sessionProcesses.get(sessionId)!;
-    // プロセスが生きているかチェック
-    if (!existingProcess.killed) {
-      return existingProcess;
-    }
-    // 死んでいれば削除
-    sessionProcesses.delete(sessionId);
-  }
+// プロセス再利用機能は将来の機能拡張用（現在は無効）
+// function getOrCreateGeminiProcess(sessionId: string, workingDirectory?: string): ChildProcess {
+//   // 既存プロセスがあればそれを返す
+//   if (sessionProcesses.has(sessionId)) {
+//     const existingProcess = sessionProcesses.get(sessionId)!;
+//     // プロセスが生きているかチェック
+//     if (!existingProcess.killed) {
+//       return existingProcess;
+//     }
+//     // 死んでいれば削除
+//     sessionProcesses.delete(sessionId);
+//   }
 
-  // 新しいプロセスを作成
-  const geminiProcess = spawn('gemini', ['--model', 'gemini-2.5-flash'], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    cwd: workingDirectory || process.cwd()
-  });
+//   // 新しいプロセスを作成
+//   const geminiProcess = spawn('gemini', ['--model', 'gemini-2.5-flash'], {
+//     stdio: ['pipe', 'pipe', 'pipe'],
+//     cwd: workingDirectory || process.cwd()
+//   });
 
-  // プロセス終了時にマップから削除
-  geminiProcess.on('exit', () => {
-    sessionProcesses.delete(sessionId);
-  });
+//   // プロセス終了時にマップから削除
+//   geminiProcess.on('exit', () => {
+//     sessionProcesses.delete(sessionId);
+//   });
 
-  // マップに登録
-  sessionProcesses.set(sessionId, geminiProcess);
+//   // マップに登録
+//   sessionProcesses.set(sessionId, geminiProcess);
   
-  return geminiProcess;
-}
+//   return geminiProcess;
+// }
 
 function executeGeminiCli(message: string, sessionId: string, workingDirectory?: string): Promise<string> {
   return new Promise((resolve, reject) => {
     console.log('Executing Gemini CLI with message:', message);
     console.log('Working directory:', workingDirectory);
     
-    // セッション別プロセスを取得（既存があれば再利用、なければ新規作成）
-    const geminiProcess = getOrCreateGeminiProcess(sessionId, workingDirectory);
+    const geminiProcess = spawn('gemini', ['--model', 'gemini-2.5-flash'], {
+      cwd: workingDirectory || process.cwd(),
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
 
     let output = '';
     let errorOutput = '';
-    let responseComplete = false;
 
-    const onData = (data: Buffer) => {
+    geminiProcess.stdout?.on('data', (data) => {
       const chunk = data.toString();
       console.log('stdout chunk:', JSON.stringify(chunk));
       output += chunk;
-      
-      // Gemini CLIの応答完了を検知（プロンプトが戻ってきたら完了）
-      if (chunk.includes('> ') || chunk.endsWith('> ')) {
-        if (!responseComplete) {
-          responseComplete = true;
-          // リスナーを削除
-          geminiProcess.stdout?.off('data', onData);
-          geminiProcess.stderr?.off('data', onError);
-          geminiProcess.off('exit', onExit);
-          
-          // プロンプト部分を除去して返答のみ抽出
-          const cleanOutput = output
-            .replace(/> $/, '')                     // 最後のプロンプトを削除
-            .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '') // ANSIエスケープシーケンス
-            .replace(/\x1b\[[0-9;]*m/g, '')         // カラーコード
-            .replace(/\r\n/g, '\n')                 // Windows改行を正規化
-            .replace(/\r/g, '\n')                   // Mac改行を正規化
-            .trim();
-          
-          console.log('Cleaned output:', JSON.stringify(cleanOutput));
-          resolve(cleanOutput);
-        }
-      }
-    };
+    });
 
-    const onError = (data: Buffer) => {
+    geminiProcess.stderr?.on('data', (data) => {
       const chunk = data.toString();
       console.log('stderr chunk:', JSON.stringify(chunk));
       errorOutput += chunk;
-    };
+    });
 
-    const onExit = () => {
-      if (!responseComplete) {
-        reject(new Error(`Gemini CLI プロセスが予期せず終了しました。エラー: ${errorOutput}`));
+    geminiProcess.on('close', (code) => {
+      console.log('Process closed with code:', code);
+      console.log('Final output:', JSON.stringify(output));
+      console.log('Final error:', JSON.stringify(errorOutput));
+      
+      if (code === 0) {
+        // 最小限のクリーンアップ
+        const cleanOutput = output
+          .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '') // ANSIエスケープシーケンス
+          .replace(/\x1b\[[0-9;]*m/g, '')         // カラーコード
+          .replace(/\r\n/g, '\n')                 // Windows改行を正規化
+          .replace(/\r/g, '\n')                   // Mac改行を正規化
+          .trim();
+        
+        console.log('Cleaned output:', JSON.stringify(cleanOutput));
+        resolve(cleanOutput);
+      } else {
+        reject(new Error(`Gemini CLI実行エラー (code ${code}): ${errorOutput}`));
       }
-    };
-
-    geminiProcess.stdout?.on('data', onData);
-    geminiProcess.stderr?.on('data', onError);
-    geminiProcess.on('exit', onExit);
+    });
 
     geminiProcess.on('error', (error) => {
       console.log('Process error:', error);
       reject(new Error(`Gemini CLI実行エラー: ${error.message}`));
     });
 
-    // メッセージを送信
+    // メッセージを送信して入力を終了
     console.log('Writing message to stdin:', JSON.stringify(message));
-    geminiProcess.stdin?.write(message + '\n');
-    
-    // タイムアウト処理（30秒）
-    setTimeout(() => {
-      if (!responseComplete) {
-        responseComplete = true;
-        geminiProcess.stdout?.off('data', onData);
-        geminiProcess.stderr?.off('data', onError);
-        geminiProcess.off('exit', onExit);
-        reject(new Error('Gemini CLI応答タイムアウト'));
-      }
-    }, 30000);
+    geminiProcess.stdin?.write(message);
+    geminiProcess.stdin?.end();
+    console.log('Message sent and stdin closed');
   });
 }
 
-export const terminateSessionProcess = (sessionId: string): void => {
-  const process = sessionProcesses.get(sessionId);
-  if (process && !process.killed) {
-    process.kill();
-  }
-  sessionProcesses.delete(sessionId);
-};
+// セッションプロセス終了のユーティリティ関数（将来の機能拡張用）
+// const terminateSessionProcess = (sessionId: string): void => {
+//   const process = sessionProcesses.get(sessionId);
+//   if (process && !process.killed) {
+//     process.kill();
+//   }
+//   sessionProcesses.delete(sessionId);
+// };
 
-export const terminateAllProcesses = (): void => {
-  sessionProcesses.forEach((process) => {
-    if (!process.killed) {
-      process.kill();
-    }
-  });
-  sessionProcesses.clear();
-};
+// const terminateAllProcesses = (): void => {
+//   sessionProcesses.forEach((process) => {
+//     if (!process.killed) {
+//       process.kill();
+//     }
+//   });
+//   sessionProcesses.clear();
+// };
