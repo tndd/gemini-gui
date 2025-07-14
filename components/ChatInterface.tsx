@@ -30,7 +30,8 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 現在のセッションが最新（アクティブ）かどうかを判定
-  const isActiveSession = sessionId === latestSessionId;
+  // latestSessionIdがnullの場合は、現在のセッションをアクティブとして扱う
+  const isActiveSession = latestSessionId === null || sessionId === latestSessionId;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -151,6 +152,12 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
 
       setMessages(prev => [...prev, assistantMessage]);
       
+      // 最新セッションIDを更新（このセッションが最新になる）
+      setLatestSessionId(sessionId);
+      
+      // サーバーのアクティブセッション情報も更新
+      loadLatestSessionId();
+      
       // セッションの最初のメッセージの場合、セッション名を自動更新
       if (messages.length === 0) {
         const newSessionName = currentInput.substring(0, 50) + (currentInput.length > 50 ? '...' : '');
@@ -165,9 +172,6 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
           console.error('セッション名更新エラー:', error);
         }
       }
-      
-      // 最新セッションIDを更新（このセッションが最新になる）
-      setLatestSessionId(sessionId);
 
     } catch (error) {
       const errorMessage: Message = {

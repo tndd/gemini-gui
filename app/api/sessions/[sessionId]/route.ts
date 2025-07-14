@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 // セッション情報の取得
-export async function GET(request: NextRequest, context: { params: { sessionId: string } }) {
+export async function GET(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
   try {
     const { sessionId } = await context.params;
     
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, context: { params: { sessionId: 
 }
 
 // セッション情報の更新
-export async function PATCH(request: NextRequest, context: { params: { sessionId: string } }) {
+export async function PATCH(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
   try {
     const { sessionId } = await context.params;
     const { name, workingDirectory } = await request.json();
@@ -87,7 +87,7 @@ export async function PATCH(request: NextRequest, context: { params: { sessionId
 }
 
 // セッションの削除
-export async function DELETE(request: NextRequest, context: { params: { sessionId: string } }) {
+export async function DELETE(request: NextRequest, context: { params: Promise<{ sessionId: string }> }) {
   try {
     const { sessionId } = await context.params;
     
