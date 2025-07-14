@@ -112,8 +112,8 @@ export default function WelcomePage() {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    // Ctrl+Enter で送信（日本語入力の誤射を防ぐ）
-    if (e.key === 'Enter' && e.ctrlKey && !e.shiftKey) {
+    // Ctrl+Enter (Windows/Linux) または Cmd+Enter (Mac) で送信（日本語入力の誤射を防ぐ）
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
       e.preventDefault();
       handleChatSubmit();
     }
@@ -140,7 +140,7 @@ export default function WelcomePage() {
               <textarea
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                onKeyPress={handleKeyPress}
+                onKeyDown={handleKeyPress}
                 placeholder="Geminiに質問してください (Ctrl+Enter で送信)"
                 className="w-full p-4 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-none text-base"
                 rows={3}

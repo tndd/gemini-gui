@@ -185,8 +185,8 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    // Ctrl+Enter で送信（日本語入力の誤射を防ぐ）
-    if (e.key === 'Enter' && e.ctrlKey && !e.shiftKey) {
+    // Ctrl+Enter (Windows/Linux) または Cmd+Enter (Mac) で送信（日本語入力の誤射を防ぐ）
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
