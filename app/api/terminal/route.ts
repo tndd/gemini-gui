@@ -2,20 +2,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { spawn, ChildProcess } from 'child_process';
 import { prisma } from '@/lib/prisma';
 import { setActiveSessionId } from '@/lib/activeSession';
+import { createModuleLogger, createSessionLogger, timeStart, timeEnd } from '@/lib/logger';
 
 // セッションIDとGemini CLIプロセスのマッピング（将来の機能拡張用）
 // const sessionProcesses = new Map<string, ChildProcess>();
 
+const logger = createModuleLogger('terminal-api');
+
 export async function POST(request: NextRequest) {
+  const startTime = timeStart('terminal-request');
+  
   try {
     const { message, sessionId, workingDirectory } = await request.json();
+    const sessionLogger = createSessionLogger(sessionId);
 
     if (!message || !sessionId) {
+      logger.warn('リクエストに必要なパラメータが不足', { message: !!message, sessionId: !!sessionId });
       return NextResponse.json(
         { error: 'メッセージとセッションIDが必要です' },
         { status: 400 }
       );
     }
+
+    sessionLogger.info('Gemini CLI実行開始', { messageLength: message.length, workingDirectory });
 
     // セッション情報を取得
     const session = await prisma.session.findUnique({
@@ -44,13 +53,13 @@ export async function POST(request: NextRequest) {
       fullPrompt = `過去の会話:\n${contextMessages}\n\n現在のメッセージ:\n${message}`;
     }
 
-    console.log('About to execute Gemini CLI...');
+    sessionLogger.info('Gemini CLI実行中', { contextMessagesCount: previousMessages.length });
     const geminiResponse = await executeGeminiCli(fullPrompt, sessionId, finalWorkingDir);
-    console.log('Gemini CLI response received:', geminiResponse);
+    sessionLogger.info('Gemini CLI実行完了', { responseLength: geminiResponse.length });
 
     // セッションが存在しない場合は作成
     if (!session) {
-      console.log('Creating new session...');
+      sessionLogger.info('新しいセッションを作成中');
       const sessionName = message.substring(0, 50) + (message.length > 50 ? '...' : '');
       await prisma.session.create({
         data: {
@@ -59,11 +68,11 @@ export async function POST(request: NextRequest) {
           workingDirectory: finalWorkingDir,
         }
       });
-      console.log('New session created');
+      sessionLogger.info('新しいセッションを作成完了', { sessionName });
     }
 
     // メッセージを保存
-    console.log('Saving message to database...');
+    sessionLogger.info('メッセージをデータベースに保存中');
     try {
       await prisma.message.create({
         data: {
@@ -72,20 +81,23 @@ export async function POST(request: NextRequest) {
           geminiResponse: geminiResponse,
         }
       });
-      console.log('Message saved successfully');
+      sessionLogger.info('メッセージ保存完了');
     } catch (dbError) {
-      console.error('Database save error:', dbError);
+      sessionLogger.error('データベース保存エラー', dbError as Error);
       throw dbError;
     }
 
     // セッションの更新時刻を更新
-    console.log('Updating session timestamp...');
+    sessionLogger.info('セッションタイムスタンプ更新中');
     await prisma.session.update({
       where: { sessionId },
       data: { updatedAt: new Date() }
     });
-    console.log('Session timestamp updated');
+    sessionLogger.info('セッションタイムスタンプ更新完了');
 
+    timeEnd('terminal-request', startTime);
+    sessionLogger.info('リクエスト処理完了');
+    
     return NextResponse.json({
       response: geminiResponse,
       workingDirectory: finalWorkingDir,
@@ -93,7 +105,8 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Gemini CLI実行エラー:', error);
+    logger.error('Gemini CLI実行エラー', error as Error, { sessionId: request.url });
+    timeEnd('terminal-request', startTime);
     return NextResponse.json(
       { error: 'Geminiとの通信でエラーが発生しました' },
       { status: 500 }
@@ -132,9 +145,13 @@ export async function POST(request: NextRequest) {
 // }
 
 function executeGeminiCli(message: string, sessionId: string, workingDirectory?: string): Promise<string> {
+  const sessionLogger = createSessionLogger(sessionId);
+  
   return new Promise((resolve, reject) => {
-    console.log('Executing Gemini CLI with message:', message);
-    console.log('Working directory:', workingDirectory);
+    sessionLogger.debug('Gemini CLIプロセス開始', { 
+      messageLength: message.length, 
+      workingDirectory 
+    });
     
     const geminiProcess = spawn('gemini', ['--model', 'gemini-2.5-flash'], {
       cwd: workingDirectory || process.cwd(),
@@ -146,20 +163,22 @@ function executeGeminiCli(message: string, sessionId: string, workingDirectory?:
 
     geminiProcess.stdout?.on('data', (data) => {
       const chunk = data.toString();
-      console.log('stdout chunk:', JSON.stringify(chunk));
+      sessionLogger.debug('stdout chunk受信', { chunkLength: chunk.length });
       output += chunk;
     });
 
     geminiProcess.stderr?.on('data', (data) => {
       const chunk = data.toString();
-      console.log('stderr chunk:', JSON.stringify(chunk));
+      sessionLogger.debug('stderr chunk受信', { chunkLength: chunk.length });
       errorOutput += chunk;
     });
 
     geminiProcess.on('close', (code) => {
-      console.log('Process closed with code:', code);
-      console.log('Final output:', JSON.stringify(output));
-      console.log('Final error:', JSON.stringify(errorOutput));
+      sessionLogger.info('Gemini CLIプロセス終了', { 
+        exitCode: code,
+        outputLength: output.length,
+        errorLength: errorOutput.length
+      });
       
       if (code === 0) {
         // 最小限のクリーンアップ
@@ -171,23 +190,30 @@ function executeGeminiCli(message: string, sessionId: string, workingDirectory?:
           .replace(/^Loaded cached credentials\.\s*/gm, '') // クレデンシャルロードメッセージを除去
           .trim();
         
-        console.log('Cleaned output:', JSON.stringify(cleanOutput));
+        sessionLogger.debug('出力クリーンアップ完了', { 
+          originalLength: output.length,
+          cleanedLength: cleanOutput.length
+        });
         resolve(cleanOutput);
       } else {
+        sessionLogger.error('Gemini CLIプロセスエラー', new Error(`Exit code: ${code}`), { 
+          exitCode: code,
+          errorOutput 
+        });
         reject(new Error(`Gemini CLI実行エラー (code ${code}): ${errorOutput}`));
       }
     });
 
     geminiProcess.on('error', (error) => {
-      console.log('Process error:', error);
+      sessionLogger.error('Gemini CLIプロセスエラー', error);
       reject(new Error(`Gemini CLI実行エラー: ${error.message}`));
     });
 
     // メッセージを送信して入力を終了
-    console.log('Writing message to stdin:', JSON.stringify(message));
+    sessionLogger.debug('メッセージを stdin に送信', { messageLength: message.length });
     geminiProcess.stdin?.write(message);
     geminiProcess.stdin?.end();
-    console.log('Message sent and stdin closed');
+    sessionLogger.debug('stdin 送信完了');
   });
 }
 
