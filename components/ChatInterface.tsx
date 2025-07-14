@@ -185,7 +185,8 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Ctrl+Enter で送信（日本語入力の誤射を防ぐ）
+    if (e.key === 'Enter' && e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
     }
@@ -335,7 +336,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder={isActiveSession ? "メッセージを入力してください..." : "過去のセッションでは入力できません"}
+                placeholder={isActiveSession ? "メッセージを入力してください (Ctrl+Enter で送信)" : "過去のセッションでは入力できません"}
                 className={`flex-1 border rounded-lg p-3 resize-none focus:outline-none text-white placeholder-gray-400 ${
                   isActiveSession 
                     ? "bg-gray-700 border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
@@ -352,6 +353,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
                     ? "bg-blue-600 hover:bg-blue-500"
                     : "bg-gray-600 cursor-not-allowed"
                 }`}
+                title="Ctrl+Enter でも送信できます"
               >
                 {isLoading ? "送信中..." : "送信"}
               </button>
