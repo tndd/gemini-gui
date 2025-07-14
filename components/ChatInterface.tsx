@@ -30,8 +30,8 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 現在のセッションが最新（アクティブ）かどうかを判定
-  // latestSessionIdがnullの場合は、現在のセッションをアクティブとして扱う
-  const isActiveSession = latestSessionId === null || sessionId === latestSessionId;
+  // latestSessionIdがnullの場合は、アクティブセッションが存在しない状態とする
+  const isActiveSession = latestSessionId !== null && sessionId === latestSessionId;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -152,10 +152,7 @@ export default function ChatInterface({ initialSessionId }: ChatInterfaceProps) 
 
       setMessages(prev => [...prev, assistantMessage]);
       
-      // 最新セッションIDを更新（このセッションが最新になる）
-      setLatestSessionId(sessionId);
-      
-      // サーバーのアクティブセッション情報も更新
+      // サーバーのアクティブセッション情報を更新
       loadLatestSessionId();
       
       // セッションの最初のメッセージの場合、セッション名を自動更新
