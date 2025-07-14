@@ -47,3 +47,6 @@ gemini-gui.db
 
 # mcp
 .mcp.json
+
+# log
+logs/

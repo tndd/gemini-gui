@@ -1,4 +1,5 @@
 import pino from 'pino';
+import fs from 'fs';
 import path from 'path';
 
 // 環境変数でログレベルを制御
@@ -7,55 +8,67 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // ログディレクトリを作成
 const LOG_DIR = path.join(process.cwd(), 'logs');
+if (!fs.existsSync(LOG_DIR)) {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+}
 
-// 開発環境用の設定
-const developmentConfig = {
-  level: LOG_LEVEL,
-  transport: {
-    target: 'pino-pretty',
-    options: {
-      colorize: true,
-      translateTime: 'SYS:yyyy-mm-dd HH:MM:ss',
-      ignore: 'pid,hostname'
-    }
-  }
-};
-
-// 本番環境用の設定
-const productionConfig = {
+// Next.jsと完全に互換性のあるシンプルな設定
+const loggerConfig = {
   level: LOG_LEVEL,
   formatters: {
     level: (label: string) => {
       return { level: label };
     }
   },
-  timestamp: pino.stdTimeFunctions.isoTime,
-  // ファイル出力設定
-  transport: {
-    targets: [
-      {
-        target: 'pino/file',
-        options: {
-          destination: path.join(LOG_DIR, 'app.log'),
-          mkdir: true
-        }
-      },
-      {
-        target: 'pino/file',
-        level: 'error',
-        options: {
-          destination: path.join(LOG_DIR, 'error.log'),
-          mkdir: true
-        }
-      }
-    ]
+  timestamp: pino.stdTimeFunctions.isoTime
+};
+
+// ロガーを作成（transportは使わない）
+const logger = pino(loggerConfig);
+
+// 開発環境と本番環境両方でファイル出力を追加
+const appLogStream = fs.createWriteStream(path.join(LOG_DIR, 'app.log'), { flags: 'a' });
+const errorLogStream = fs.createWriteStream(path.join(LOG_DIR, 'error.log'), { flags: 'a' });
+
+// 元のログ関数を保存
+const originalInfo = logger.info.bind(logger);
+const originalError = logger.error.bind(logger);
+const originalWarn = logger.warn.bind(logger);
+const originalDebug = logger.debug.bind(logger);
+
+// ファイル出力付きでラップ
+logger.info = (...args: any[]) => {
+  originalInfo(...args);
+  if (args.length > 0) {
+    const logEntry = { level: 'info', time: new Date().toISOString(), message: args[0], data: args[1] || {} };
+    appLogStream.write(JSON.stringify(logEntry) + '\n');
   }
 };
 
-// 環境に応じてロガーを作成
-const logger = pino(
-  NODE_ENV === 'development' ? developmentConfig : productionConfig
-);
+logger.error = (...args: any[]) => {
+  originalError(...args);
+  if (args.length > 0) {
+    const logEntry = { level: 'error', time: new Date().toISOString(), message: args[0], error: args[1]?.stack || args[1], data: args[2] || {} };
+    errorLogStream.write(JSON.stringify(logEntry) + '\n');
+    appLogStream.write(JSON.stringify(logEntry) + '\n');
+  }
+};
+
+logger.warn = (...args: any[]) => {
+  originalWarn(...args);
+  if (args.length > 0) {
+    const logEntry = { level: 'warn', time: new Date().toISOString(), message: args[0], data: args[1] || {} };
+    appLogStream.write(JSON.stringify(logEntry) + '\n');
+  }
+};
+
+logger.debug = (...args: any[]) => {
+  originalDebug(...args);
+  if (args.length > 0) {
+    const logEntry = { level: 'debug', time: new Date().toISOString(), message: args[0], data: args[1] || {} };
+    appLogStream.write(JSON.stringify(logEntry) + '\n');
+  }
+};
 
 // セッション固有のロガーを作成するヘルパー
 export const createSessionLogger = (sessionId: string) => {
