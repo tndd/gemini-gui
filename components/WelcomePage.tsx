@@ -112,7 +112,8 @@ export default function WelcomePage() {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Ctrl+Enter で送信（日本語入力の誤射を防ぐ）
+    if (e.key === 'Enter' && e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
       handleChatSubmit();
     }
@@ -140,7 +141,7 @@ export default function WelcomePage() {
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Geminiに質問してください..."
+                placeholder="Geminiに質問してください (Ctrl+Enter で送信)"
                 className="w-full p-4 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-none text-base"
                 rows={3}
                 disabled={isLoading}
@@ -185,6 +186,7 @@ export default function WelcomePage() {
                   onClick={handleChatSubmit}
                   disabled={!chatInput.trim() || !selectedDirectory || isLoading}
                   className="px-6 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                  title="Ctrl+Enter でも送信できます"
                 >
                   {isLoading ? '送信中...' : '送信'}
                 </button>
