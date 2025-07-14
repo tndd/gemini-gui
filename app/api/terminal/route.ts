@@ -168,6 +168,7 @@ function executeGeminiCli(message: string, sessionId: string, workingDirectory?:
           .replace(/\x1b\[[0-9;]*m/g, '')         // カラーコード
           .replace(/\r\n/g, '\n')                 // Windows改行を正規化
           .replace(/\r/g, '\n')                   // Mac改行を正規化
+          .replace(/^Loaded cached credentials\.\s*/gm, '') // クレデンシャルロードメッセージを除去
           .trim();
         
         console.log('Cleaned output:', JSON.stringify(cleanOutput));
