@@ -32,9 +32,11 @@ export async function POST(request: NextRequest) {
     });
 
     const finalWorkingDir = session?.workingDirectory || workingDirectory || process.cwd();
+    sessionLogger.debug('作業ディレクトリ決定', { finalWorkingDir });
 
     // メッセージ送信でこのセッションをアクティブに設定
     setActiveSessionId(sessionId);
+    sessionLogger.debug('アクティブセッション設定完了');
 
     // セッションのコンテキスト取得（過去のメッセージ）
     const previousMessages = await prisma.message.findMany({
@@ -42,6 +44,8 @@ export async function POST(request: NextRequest) {
       orderBy: { timestamp: 'asc' },
       take: 10 // 最新10件のメッセージをコンテキストとして使用
     });
+
+    sessionLogger.debug('コンテキスト取得完了', { previousMessagesCount: previousMessages.length });
 
     // コンテキストを含むプロンプトを構築
     let fullPrompt = message;
@@ -51,15 +55,16 @@ export async function POST(request: NextRequest) {
       ).join('\n\n');
       
       fullPrompt = `過去の会話:\n${contextMessages}\n\n現在のメッセージ:\n${message}`;
+      sessionLogger.debug('コンテキスト付きプロンプト構築完了');
     }
 
-    sessionLogger.info('Gemini CLI実行中', { contextMessagesCount: previousMessages.length });
+    sessionLogger.debug('Gemini CLI実行中', { contextMessagesCount: previousMessages.length });
     const geminiResponse = await executeGeminiCli(fullPrompt, sessionId, finalWorkingDir);
     sessionLogger.info('Gemini CLI実行完了', { responseLength: geminiResponse.length });
 
     // セッションが存在しない場合は作成
     if (!session) {
-      sessionLogger.info('新しいセッションを作成中');
+      sessionLogger.info('新しいセッション作成中');
       const sessionName = message.substring(0, 50) + (message.length > 50 ? '...' : '');
       await prisma.session.create({
         data: {
@@ -68,11 +73,11 @@ export async function POST(request: NextRequest) {
           workingDirectory: finalWorkingDir,
         }
       });
-      sessionLogger.info('新しいセッションを作成完了', { sessionName });
+      sessionLogger.info('新しいセッション作成完了', { sessionName });
     }
 
     // メッセージを保存
-    sessionLogger.info('メッセージをデータベースに保存中');
+    sessionLogger.debug('メッセージをデータベースに保存中');
     try {
       await prisma.message.create({
         data: {
@@ -81,19 +86,19 @@ export async function POST(request: NextRequest) {
           geminiResponse: geminiResponse,
         }
       });
-      sessionLogger.info('メッセージ保存完了');
+      sessionLogger.debug('メッセージ保存完了');
     } catch (dbError) {
       sessionLogger.error('データベース保存エラー', dbError as Error);
       throw dbError;
     }
 
     // セッションの更新時刻を更新
-    sessionLogger.info('セッションタイムスタンプ更新中');
+    sessionLogger.debug('セッションタイムスタンプ更新中');
     await prisma.session.update({
       where: { sessionId },
       data: { updatedAt: new Date() }
     });
-    sessionLogger.info('セッションタイムスタンプ更新完了');
+    sessionLogger.debug('セッションタイムスタンプ更新完了');
 
     timeEnd('terminal-request', startTime);
     sessionLogger.info('リクエスト処理完了');
@@ -174,7 +179,7 @@ function executeGeminiCli(message: string, sessionId: string, workingDirectory?:
     });
 
     geminiProcess.on('close', (code) => {
-      sessionLogger.info('Gemini CLIプロセス終了', { 
+      sessionLogger.debug('Gemini CLIプロセス終了', { 
         exitCode: code,
         outputLength: output.length,
         errorLength: errorOutput.length

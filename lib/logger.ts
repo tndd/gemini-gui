@@ -3,8 +3,8 @@ import fs from 'fs';
 import path from 'path';
 
 // 環境変数でログレベルを制御
-const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
-const NODE_ENV = process.env.NODE_ENV || 'development';
+const CONSOLE_LOG_LEVEL = process.env.CONSOLE_LOG_LEVEL || 'info';  // コンソール用
+const FILE_LOG_LEVEL = process.env.FILE_LOG_LEVEL || 'debug';       // ファイル用
 
 // ログディレクトリを作成
 const LOG_DIR = path.join(process.cwd(), 'logs');
@@ -12,9 +12,9 @@ if (!fs.existsSync(LOG_DIR)) {
   fs.mkdirSync(LOG_DIR, { recursive: true });
 }
 
-// Next.jsと完全に互換性のあるシンプルな設定
-const loggerConfig = {
-  level: LOG_LEVEL,
+// コンソール用のロガー（最小限の出力）
+const consoleLoggerConfig = {
+  level: CONSOLE_LOG_LEVEL,
   formatters: {
     level: (label: string) => {
       return { level: label };
@@ -23,50 +23,88 @@ const loggerConfig = {
   timestamp: pino.stdTimeFunctions.isoTime
 };
 
-// ロガーを作成（transportは使わない）
-const logger = pino(loggerConfig);
+// ファイル用のロガー（詳細な出力）
+const fileLoggerConfig = {
+  level: FILE_LOG_LEVEL,
+  formatters: {
+    level: (label: string) => {
+      return { level: label };
+    }
+  },
+  timestamp: pino.stdTimeFunctions.isoTime
+};
 
-// 開発環境と本番環境両方でファイル出力を追加
+// ロガーを作成
+const consoleLogger = pino(consoleLoggerConfig);
+const fileLogger = pino(fileLoggerConfig);
+
+// ファイル出力ストリーム
 const appLogStream = fs.createWriteStream(path.join(LOG_DIR, 'app.log'), { flags: 'a' });
 const errorLogStream = fs.createWriteStream(path.join(LOG_DIR, 'error.log'), { flags: 'a' });
 
-// 元のログ関数を保存
-const originalInfo = logger.info.bind(logger);
-const originalError = logger.error.bind(logger);
-const originalWarn = logger.warn.bind(logger);
-const originalDebug = logger.debug.bind(logger);
+// ログレベルの優先度
+const LOG_LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
+const getLogLevel = (level: string) => LOG_LEVELS[level as keyof typeof LOG_LEVELS] || 0;
 
-// ファイル出力付きでラップ
-logger.info = (...args: any[]) => {
-  originalInfo(...args);
-  if (args.length > 0) {
-    const logEntry = { level: 'info', time: new Date().toISOString(), message: args[0], data: args[1] || {} };
-    appLogStream.write(JSON.stringify(logEntry) + '\n');
-  }
-};
+// 統合ロガーオブジェクトを作成
+const logger = {
+  info: (msg: any, obj?: any) => {
+    // コンソール出力（infoレベル以上）
+    if (getLogLevel('info') >= getLogLevel(CONSOLE_LOG_LEVEL)) {
+      consoleLogger.info(msg, obj);
+    }
+    // ファイル出力（常に詳細）
+    if (getLogLevel('info') >= getLogLevel(FILE_LOG_LEVEL)) {
+      const logEntry = { level: 'info', time: new Date().toISOString(), message: msg, data: obj || {} };
+      appLogStream.write(JSON.stringify(logEntry) + '\n');
+    }
+  },
 
-logger.error = (...args: any[]) => {
-  originalError(...args);
-  if (args.length > 0) {
-    const logEntry = { level: 'error', time: new Date().toISOString(), message: args[0], error: args[1]?.stack || args[1], data: args[2] || {} };
-    errorLogStream.write(JSON.stringify(logEntry) + '\n');
-    appLogStream.write(JSON.stringify(logEntry) + '\n');
-  }
-};
+  error: (msg: any, err?: any, obj?: any) => {
+    // コンソール出力（errorレベル以上）
+    if (getLogLevel('error') >= getLogLevel(CONSOLE_LOG_LEVEL)) {
+      consoleLogger.error(msg, err, obj);
+    }
+    // ファイル出力（常に詳細）
+    if (getLogLevel('error') >= getLogLevel(FILE_LOG_LEVEL)) {
+      const logEntry = { level: 'error', time: new Date().toISOString(), message: msg, error: err?.stack || err, data: obj || {} };
+      errorLogStream.write(JSON.stringify(logEntry) + '\n');
+      appLogStream.write(JSON.stringify(logEntry) + '\n');
+    }
+  },
 
-logger.warn = (...args: any[]) => {
-  originalWarn(...args);
-  if (args.length > 0) {
-    const logEntry = { level: 'warn', time: new Date().toISOString(), message: args[0], data: args[1] || {} };
-    appLogStream.write(JSON.stringify(logEntry) + '\n');
-  }
-};
+  warn: (msg: any, obj?: any) => {
+    // コンソール出力（warnレベル以上）
+    if (getLogLevel('warn') >= getLogLevel(CONSOLE_LOG_LEVEL)) {
+      consoleLogger.warn(msg, obj);
+    }
+    // ファイル出力（常に詳細）
+    if (getLogLevel('warn') >= getLogLevel(FILE_LOG_LEVEL)) {
+      const logEntry = { level: 'warn', time: new Date().toISOString(), message: msg, data: obj || {} };
+      appLogStream.write(JSON.stringify(logEntry) + '\n');
+    }
+  },
 
-logger.debug = (...args: any[]) => {
-  originalDebug(...args);
-  if (args.length > 0) {
-    const logEntry = { level: 'debug', time: new Date().toISOString(), message: args[0], data: args[1] || {} };
-    appLogStream.write(JSON.stringify(logEntry) + '\n');
+  debug: (msg: any, obj?: any) => {
+    // コンソール出力（debugレベル以上）
+    if (getLogLevel('debug') >= getLogLevel(CONSOLE_LOG_LEVEL)) {
+      consoleLogger.debug(msg, obj);
+    }
+    // ファイル出力（常に詳細）
+    if (getLogLevel('debug') >= getLogLevel(FILE_LOG_LEVEL)) {
+      const logEntry = { level: 'debug', time: new Date().toISOString(), message: msg, data: obj || {} };
+      appLogStream.write(JSON.stringify(logEntry) + '\n');
+    }
+  },
+
+  child: (obj: any) => {
+    // 子ロガーも同じ仕組みで作成
+    return {
+      info: (msg: any, childObj?: any) => logger.info(msg, { ...obj, ...childObj }),
+      error: (msg: any, err?: any, childObj?: any) => logger.error(msg, err, { ...obj, ...childObj }),
+      warn: (msg: any, childObj?: any) => logger.warn(msg, { ...obj, ...childObj }),
+      debug: (msg: any, childObj?: any) => logger.debug(msg, { ...obj, ...childObj })
+    };
   }
 };
 
@@ -111,13 +149,13 @@ export const logWarn = (msg: string, context?: LogContext) => {
 };
 
 // パフォーマンス測定用
-export const timeStart = (label: string) => {
+export const timeStart = (_label: string) => {
   return process.hrtime();
 };
 
 export const timeEnd = (label: string, startTime: [number, number]) => {
   const [seconds, nanoseconds] = process.hrtime(startTime);
   const duration = seconds * 1000 + nanoseconds / 1000000; // ミリ秒
-  logger.info({ label, duration: `${duration.toFixed(2)}ms` }, `${label} completed`);
+  logger.info(`${label} completed`, { label, duration: `${duration.toFixed(2)}ms` });
   return duration;
 };
