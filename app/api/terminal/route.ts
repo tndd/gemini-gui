@@ -1,17 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { spawn, ChildProcess } from 'child_process';
-import { prisma } from '@/lib/prisma';
 import { setActiveSessionId } from '@/lib/activeSession';
-import { createModuleLogger, createSessionLogger, timeStart, timeEnd } from '@/lib/logger';
+import { createModuleLogger, createSessionLogger, timeEnd, timeStart } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
+import { spawn } from 'child_process';
+import { NextRequest, NextResponse } from 'next/server';
 
-// セッションIDとGemini CLIプロセスのマッピング（将来の機能拡張用）
-// const sessionProcesses = new Map<string, ChildProcess>();
 
 const logger = createModuleLogger('terminal-api');
 
 export async function POST(request: NextRequest) {
   const startTime = timeStart('terminal-request');
-  
+
   try {
     const { message, sessionId, workingDirectory } = await request.json();
     const sessionLogger = createSessionLogger(sessionId);
@@ -50,10 +48,10 @@ export async function POST(request: NextRequest) {
     // コンテキストを含むプロンプトを構築
     let fullPrompt = message;
     if (previousMessages.length > 0) {
-      const contextMessages = previousMessages.map(msg => 
+      const contextMessages = previousMessages.map(msg =>
         `ユーザー: ${msg.userInput}\nアシスタント: ${msg.geminiResponse}`
       ).join('\n\n');
-      
+
       fullPrompt = `過去の会話:\n${contextMessages}\n\n現在のメッセージ:\n${message}`;
       sessionLogger.debug('コンテキスト付きプロンプト構築完了');
     }
@@ -102,7 +100,7 @@ export async function POST(request: NextRequest) {
 
     timeEnd('terminal-request', startTime);
     sessionLogger.info('リクエスト処理完了');
-    
+
     return NextResponse.json({
       response: geminiResponse,
       workingDirectory: finalWorkingDir,
@@ -119,45 +117,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// プロセス再利用機能は将来の機能拡張用（現在は無効）
-// function getOrCreateGeminiProcess(sessionId: string, workingDirectory?: string): ChildProcess {
-//   // 既存プロセスがあればそれを返す
-//   if (sessionProcesses.has(sessionId)) {
-//     const existingProcess = sessionProcesses.get(sessionId)!;
-//     // プロセスが生きているかチェック
-//     if (!existingProcess.killed) {
-//       return existingProcess;
-//     }
-//     // 死んでいれば削除
-//     sessionProcesses.delete(sessionId);
-//   }
-
-//   // 新しいプロセスを作成
-//   const geminiProcess = spawn('gemini', ['--model', 'gemini-2.5-flash'], {
-//     stdio: ['pipe', 'pipe', 'pipe'],
-//     cwd: workingDirectory || process.cwd()
-//   });
-
-//   // プロセス終了時にマップから削除
-//   geminiProcess.on('exit', () => {
-//     sessionProcesses.delete(sessionId);
-//   });
-
-//   // マップに登録
-//   sessionProcesses.set(sessionId, geminiProcess);
-  
-//   return geminiProcess;
-// }
-
 function executeGeminiCli(message: string, sessionId: string, workingDirectory?: string): Promise<string> {
   const sessionLogger = createSessionLogger(sessionId);
-  
+
   return new Promise((resolve, reject) => {
-    sessionLogger.debug('Gemini CLIプロセス開始', { 
-      messageLength: message.length, 
-      workingDirectory 
+    sessionLogger.debug('Gemini CLIプロセス開始', {
+      messageLength: message.length,
+      workingDirectory
     });
-    
+
     const geminiProcess = spawn('gemini', ['--model', 'gemini-2.5-flash'], {
       cwd: workingDirectory || process.cwd(),
       stdio: ['pipe', 'pipe', 'pipe']
@@ -179,12 +147,12 @@ function executeGeminiCli(message: string, sessionId: string, workingDirectory?:
     });
 
     geminiProcess.on('close', (code) => {
-      sessionLogger.debug('Gemini CLIプロセス終了', { 
+      sessionLogger.debug('Gemini CLIプロセス終了', {
         exitCode: code,
         outputLength: output.length,
         errorLength: errorOutput.length
       });
-      
+
       if (code === 0) {
         // 最小限のクリーンアップ
         const cleanOutput = output
@@ -194,16 +162,16 @@ function executeGeminiCli(message: string, sessionId: string, workingDirectory?:
           .replace(/\r/g, '\n')                   // Mac改行を正規化
           .replace(/^Loaded cached credentials\.\s*/gm, '') // クレデンシャルロードメッセージを除去
           .trim();
-        
-        sessionLogger.debug('出力クリーンアップ完了', { 
+
+        sessionLogger.debug('出力クリーンアップ完了', {
           originalLength: output.length,
           cleanedLength: cleanOutput.length
         });
         resolve(cleanOutput);
       } else {
-        sessionLogger.error('Gemini CLIプロセスエラー', new Error(`Exit code: ${code}`), { 
+        sessionLogger.error('Gemini CLIプロセスエラー', new Error(`Exit code: ${code}`), {
           exitCode: code,
-          errorOutput 
+          errorOutput
         });
         reject(new Error(`Gemini CLI実行エラー (code ${code}): ${errorOutput}`));
       }
